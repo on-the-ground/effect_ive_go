@@ -3,83 +3,144 @@ package effects
 import (
 	"context"
 	"fmt"
+
+	"github.com/on-the-ground/effect_ive_go/effects/internal/effectscope"
+
+	effectmodel "github.com/on-the-ground/effect_ive_go/effects/model"
 )
 
-type EffectId int
-
-const (
-	EffectLog EffectId = iota
-	EffectRaise
-	EffectTimeout
-)
-
-func (e EffectId) String() string {
-	switch e {
-	case EffectLog:
-		return "log"
-	case EffectRaise:
-		return "raise"
-	case EffectTimeout:
-		return "timeout"
-	default:
-		return "unknown"
+func WithResumableEffectHandler[T any, R any](
+	ctx context.Context,
+	enum effectmodel.EffectEnum,
+	handleFn func(context.Context, T) R,
+	teardown ...func(),
+) (context.Context, func()) {
+	td := assertTeardown(teardown)
+	handler := resumableHandler[T, R]{
+		ResumableEffectScope: effectscope.NewResumableEffectScope(ctx, handleFn, td),
+	}
+	LogEffect(ctx, LogInfo, "created resumable effect handler", map[string]interface{}{
+		"effectId": handler.EffectId,
+		"enum":     enum,
+	})
+	ctxWith := context.WithValue(ctx, enum, handler)
+	return ctxWith, func() {
+		handler.Close()
+		LogEffect(ctx, LogInfo, "closed resumable effect handler", map[string]interface{}{
+			"effectId": handler.EffectId,
+			"enum":     enum,
+		})
 	}
 }
 
-type effectKey struct {
-	id EffectId
+func PerformEffect[T any, R any](ctx context.Context, enum effectmodel.EffectEnum, payload T) R {
+	raw := ctx.Value(enum)
+	if raw == nil {
+		panic(fmt.Errorf("missing effect handler for %v", enum))
+	}
+	handler, ok := raw.(resumableHandler[T, R])
+	if !ok {
+		panic(fmt.Errorf("missing effect handler for %v", enum))
+
+	}
+	return handler.PerformEffect(ctx, payload)
 }
 
-type effectMessage[T any, U any] struct {
-	payload T
-	resume  chan U
-}
-
-func withEffectTyped[T any, U any](
+func WithFireAndForgetEffectHandler[T any](
 	ctx context.Context,
-	id EffectId,
-	handler func(T) U,
+	enum effectmodel.EffectEnum,
+	handleFn func(context.Context, T),
+	teardown ...func(),
 ) (context.Context, func()) {
-	inbox := make(chan effectMessage[T, U])
-	done := make(chan struct{})
+	td := assertTeardown(teardown)
+	handler := fireAndForgetHandler[T]{
+		FireAndForgetEffectScope: effectscope.NewFireAndForgetEffectScope(ctx, handleFn, td),
+	}
+	LogEffect(ctx, LogInfo, "created fire/forget effect handler", map[string]interface{}{
+		"effectId": handler.EffectId,
+		"enum":     enum,
+	})
+	ctxWith := context.WithValue(ctx, enum, handler)
+	return ctxWith, func() {
+		handler.Close()
+		LogEffect(ctx, LogInfo, "closed fire/forget effect handler", map[string]interface{}{
+			"effectId": handler.EffectId,
+			"enum":     enum,
+		})
+	}
+}
 
-	go func() {
-		for {
-			select {
-			case msg := <-inbox:
-				msg.resume <- handler(msg.payload)
-			case <-done:
-				close(inbox)
-				return
-			}
+func FireAndForgetEffect[T any](ctx context.Context, enum effectmodel.EffectEnum, payload T) {
+	raw := ctx.Value(enum)
+	if raw == nil {
+		panic(fmt.Errorf("missing effect handler for %v", enum))
+	}
+	handler, ok := raw.(fireAndForgetHandler[T])
+	if !ok {
+		panic(fmt.Errorf("missing effect handler for %v", enum))
+
+	}
+	handler.FireAndForgetEffect(ctx, payload)
+}
+
+func assertTeardown(teardown []func()) func() {
+	switch len(teardown) {
+	case 1:
+		return teardown[0]
+	case 0:
+		return func() {}
+	default:
+		panic("Too many teardown functions")
+	}
+}
+
+type resumableHandler[T any, R any] struct {
+	*effectscope.ResumableEffectScope[T, R]
+}
+
+func (rh resumableHandler[T, R]) PerformEffect(ctx context.Context, payload T) (ret R) {
+	defer func() {
+		if r := recover(); r != nil {
+			LogEffect(ctx, LogError, "panic while sending to closed channel for effect", map[string]interface{}{
+				"effectId": rh.EffectId,
+				"payload":  payload,
+			})
 		}
 	}()
 
-	ctxWith := context.WithValue(ctx, effectKey{id: id}, inbox)
+	resumeCh := make(chan R, 1)
 
-	teardown := func() {
-		close(done)
+	select {
+	case rh.EffectCh <- effectmodel.ResumableEffectMessage[T, R]{
+		Payload:  payload,
+		ResumeCh: resumeCh,
+	}:
+	case <-ctx.Done():
+		return
 	}
 
-	return ctxWith, teardown
+	ret = <-resumeCh
+	return
 }
 
-func performEffect[T any, U any](ctx context.Context, id EffectId, payload T) U {
-	key := effectKey{id: id}
-	raw := ctx.Value(key)
-	if raw == nil {
-		panic(fmt.Sprintf("unhandled effect: %s", id))
-	}
+type fireAndForgetHandler[T any] struct {
+	*effectscope.FireAndForgetEffectScope[T]
+}
 
-	inbox, ok := raw.(chan effectMessage[T, U])
-	if !ok {
-		panic(fmt.Sprintf("invalid handler type for effect: %s (expected chan effectMessage[T, U])", id))
-	}
+func (ffh fireAndForgetHandler[T]) FireAndForgetEffect(ctx context.Context, payload T) {
+	defer func() {
+		if r := recover(); r != nil {
+			LogEffect(ctx, LogError, "panic while sending to closed channel for effect", map[string]interface{}{
+				"effectId": ffh.EffectId,
+				"payload":  payload,
+			})
+		}
+	}()
 
-	resume := make(chan U)
-	inbox <- effectMessage[T, U]{
-		payload: payload,
-		resume:  resume,
+	select {
+	case ffh.EffectCh <- effectmodel.FireAndForgetEffectMessage[T]{
+		Payload: payload,
+	}:
+	case <-ctx.Done():
 	}
-	return <-resume
 }
