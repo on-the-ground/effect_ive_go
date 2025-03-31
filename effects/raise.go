@@ -14,7 +14,7 @@ func WithRaiseEffect(ctx context.Context, handler func(error)) (context.Context,
 }
 
 func RaiseEffect(ctx context.Context, err error) {
-	performEffect[error, any](ctx, EffectRaise, err)
+	performEffect[error, struct{}](ctx, EffectRaise, err)
 	panic(err)
 }
 
