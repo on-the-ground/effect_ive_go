@@ -8,12 +8,12 @@ type LogMessage struct {
 }
 
 func WithLogEffect(ctx context.Context, handler func(LogMessage)) (context.Context, func()) {
-	return withEffectTyped(ctx, EffectLog, func(msg LogMessage) struct{} {
+	return WithEffect(ctx, EffectLog, func(msg LogMessage) struct{} {
 		handler(msg)
 		return struct{}{}
 	})
 }
 
 func LogEffect(ctx context.Context, payload LogMessage) {
-	performEffect[LogMessage, struct{}](ctx, EffectLog, payload)
+	PerformEffect[LogMessage, struct{}](ctx, EffectLog, payload)
 }

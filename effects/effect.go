@@ -5,81 +5,42 @@ import (
 	"fmt"
 )
 
-type EffectId int
-
-const (
-	EffectLog EffectId = iota
-	EffectRaise
-	EffectTimeout
-)
-
-func (e EffectId) String() string {
-	switch e {
-	case EffectLog:
-		return "log"
-	case EffectRaise:
-		return "raise"
-	case EffectTimeout:
-		return "timeout"
-	default:
-		return "unknown"
-	}
-}
-
-type effectKey struct {
-	id EffectId
-}
-
-type effectMessage[T any, U any] struct {
-	payload T
-	resume  chan U
-}
-
-func withEffectTyped[T any, U any](
+func WithEffect[T any, R any](
 	ctx context.Context,
-	id EffectId,
-	handler func(T) U,
+	enum EffectEnum,
+	handler func(T) R,
+	teardown ...func(),
 ) (context.Context, func()) {
-	inbox := make(chan effectMessage[T, U])
-	done := make(chan struct{})
-
-	go func() {
-		for {
-			select {
-			case msg := <-inbox:
-				msg.resume <- handler(msg.payload)
-			case <-done:
-				close(inbox)
-				return
-			}
-		}
-	}()
-
-	ctxWith := context.WithValue(ctx, effectKey{id: id}, inbox)
-
-	teardown := func() {
-		close(done)
+	var td func()
+	switch len(teardown) {
+	case 1:
+		td = teardown[0]
+	case 0:
+		td = func() {}
+	default:
+		panic("Too many teardown functions")
 	}
 
-	return ctxWith, teardown
+	scope := newEffectScope(ctx, handler, td)
+	ctxWith := context.WithValue(ctx, enum, scope)
+	return ctxWith, scope.close
 }
 
-func performEffect[T any, U any](ctx context.Context, id EffectId, payload T) U {
-	key := effectKey{id: id}
-	raw := ctx.Value(key)
+func PerformEffect[T any, R any](ctx context.Context, enum EffectEnum, payload T) R {
+	raw := ctx.Value(enum)
 	if raw == nil {
-		panic(fmt.Sprintf("unhandled effect: %s", id))
+		panic(fmt.Sprintf("no handler for effect: %s", enum))
 	}
-
-	inbox, ok := raw.(chan effectMessage[T, U])
+	scope, ok := raw.(*effectScope[T, R])
 	if !ok {
-		panic(fmt.Sprintf("invalid handler type for effect: %s (expected chan effectMessage[T, U])", id))
-	}
+		panic(fmt.Sprintf("no handler for effect: %s", enum))
 
-	resume := make(chan U)
-	inbox <- effectMessage[T, U]{
+	}
+	resume := make(chan R, 1)
+	scope.effCh <- effectMessage[T, R]{
 		payload: payload,
 		resume:  resume,
 	}
-	return <-resume
+	result := <-resume
+	return result
 }

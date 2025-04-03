@@ -3,7 +3,7 @@ package effects
 import "context"
 
 func WithRaiseEffect(ctx context.Context, handler func(error)) (context.Context, func()) {
-	ctxWithRaiseEffect, endOfRaise := withEffectTyped(ctx, EffectRaise, func(err error) struct{} {
+	ctxWithRaiseEffect, endOfRaise := WithEffect(ctx, EffectRaise, func(err error) struct{} {
 		handler(err)
 		return struct{}{}
 	})
@@ -14,7 +14,7 @@ func WithRaiseEffect(ctx context.Context, handler func(error)) (context.Context,
 }
 
 func RaiseEffect(ctx context.Context, err error) {
-	performEffect[error, struct{}](ctx, EffectRaise, err)
+	PerformEffect[error, struct{}](ctx, EffectRaise, err)
 	panic(err)
 }
 
