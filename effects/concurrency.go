@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	effectmodel "github.com/on-the-ground/effect_ive_go/effects/model"
+	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 )
 
 func spawnConcurrentChildren(wg *sync.WaitGroup, childrenCancels *[]context.CancelFunc, functions []func(context.Context)) {
@@ -52,10 +52,22 @@ func waitChildren(ctx context.Context, wg *sync.WaitGroup, childrenCancels []con
 func WithConcurrencyEffectHandler(
 	ctx context.Context,
 ) (context.Context, func()) {
+	bufferSize, err := GetFromBindingEffect[int](ctx, "config.effect.binding.handler.buffer_size")
+	if err != nil {
+		bufferSize = 1
+	}
+	numWorkers, err := GetFromBindingEffect[int](ctx, "config.effect.binding.handler.num_workers")
+	if err != nil {
+		numWorkers = 1
+	}
+
 	wg := &sync.WaitGroup{}
 	var childrenCancels []context.CancelFunc
 
-	ctx, endOfConcurrency := WithFireAndForgetEffectHandler(ctx, effectmodel.EffectConcurrency,
+	ctx, endOfConcurrency := WithFireAndForgetEffectHandler(
+		ctx,
+		effectmodel.NewEffectScopeConfig(bufferSize, numWorkers),
+		effectmodel.EffectConcurrency,
 		func(ctx context.Context, payload []func(context.Context)) {
 			spawnConcurrentChildren(wg, &childrenCancels, payload)
 		},
