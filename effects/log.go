@@ -3,6 +3,7 @@ package effects
 import (
 	"context"
 
+	"github.com/on-the-ground/effect_ive_go/effects/configkeys"
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 	"go.uber.org/zap"
 )
@@ -23,11 +24,11 @@ type LogPayload struct {
 }
 
 func WithZapLogEffectHandler(ctx context.Context, logger *zap.Logger) (context.Context, func()) {
-	bufferSize, err := GetFromBindingEffect[int](ctx, "config.effect.binding.handler.buffer_size")
+	bufferSize, err := GetFromBindingEffect[int](ctx, configkeys.ConfigEffectLogHandlerBufferSize)
 	if err != nil {
 		bufferSize = 1
 	}
-	numWorkers, err := GetFromBindingEffect[int](ctx, "config.effect.binding.handler.num_workers")
+	numWorkers, err := GetFromBindingEffect[int](ctx, configkeys.ConfigEffectLogHandlerNumWorkers)
 	if err != nil {
 		numWorkers = 1
 	}

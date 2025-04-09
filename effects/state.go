@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/on-the-ground/effect_ive_go/effects/configkeys"
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 )
 
@@ -56,8 +57,14 @@ type StateResult struct {
 }
 
 func WithStateEffectHandler(ctx context.Context, initMap map[string]any) (context.Context, func()) {
-	bufferSize := MustGetFromBindingEffect[int](ctx, "config.effect.state.handler.buffer_size")
-	numWorkers := MustGetFromBindingEffect[int](ctx, "config.effect.state.handler.num_workers")
+	bufferSize, err := GetFromBindingEffect[int](ctx, configkeys.ConfigEffectStateHandlerBufferSize)
+	if err != nil {
+		bufferSize = 1
+	}
+	numWorkers, err := GetFromBindingEffect[int](ctx, configkeys.ConfigEffectStateHandlerNumWorkers)
+	if err != nil {
+		numWorkers = 1
+	}
 
 	stateHandler := &stateHandler{
 		stateMap: &sync.Map{},

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/on-the-ground/effect_ive_go/effects/configkeys"
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 )
 
@@ -21,11 +22,12 @@ type BindingResult struct {
 }
 
 func WithBindingEffectHandler(ctx context.Context, bindingMap map[string]any) (context.Context, func()) {
-	bufferSize, err := GetFromBindingEffect[int](ctx, "config.effect.binding.handler.buffer_size")
+	bufferSize, err := GetFromBindingEffect[int](ctx, configkeys.ConfigEffectBindingHandlerBufferSize)
 	if err != nil {
 		bufferSize = 1
 	}
-	numWorkers, err := GetFromBindingEffect[int](ctx, "config.effect.binding.handler.num_workers")
+
+	numWorkers, err := GetFromBindingEffect[int](ctx, configkeys.ConfigEffectBindingHandlerNumWorkers)
 	if err != nil {
 		numWorkers = 1
 	}
