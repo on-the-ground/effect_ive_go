@@ -11,6 +11,10 @@ type BindingPayload struct {
 	Key string
 }
 
+func (bp BindingPayload) PartitionKey() string {
+	return bp.Key
+}
+
 type BindingResult struct {
 	value any
 	err   error

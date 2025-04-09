@@ -27,3 +27,7 @@ func NewEffectScopeConfig(bufferSize int, numWorkers int) EffectScopeConfig {
 		NumWorkers: numWorkers,
 	}
 }
+
+type Partitionable interface {
+	PartitionKey() string
+}

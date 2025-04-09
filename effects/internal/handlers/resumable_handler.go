@@ -8,7 +8,7 @@ import (
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 )
 
-func NewResumableEffectHandler[T any, R any](
+func NewResumableEffectHandler[T effectmodel.Partitionable, R any](
 	ctx context.Context,
 	config effectmodel.EffectScopeConfig,
 	handleFn func(context.Context, T) R,
@@ -19,7 +19,7 @@ func NewResumableEffectHandler[T any, R any](
 	}
 }
 
-type ResumableHandler[T any, R any] struct {
+type ResumableHandler[T effectmodel.Partitionable, R any] struct {
 	*resumableEffectScope[T, R]
 }
 
@@ -35,12 +35,13 @@ func (rh ResumableHandler[T, R]) PerformEffect(ctx context.Context, payload T) (
 
 	resumeCh := make(chan R, 1)
 
-	select {
-	case <-ctx.Done():
-	case rh.EffectCh <- resumableEffectMessage[T, R]{
+	msg := resumableEffectMessage[T, R]{
 		payload:  payload,
 		resumeCh: resumeCh,
-	}:
+	}
+	select {
+	case <-ctx.Done():
+	case rh.effectChs[getIndexByHash(msg.payload, len(rh.effectChs))] <- msg:
 	}
 
 	select {
@@ -66,11 +67,11 @@ func (rh ResumableHandler[T, R]) PerformEffect(ctx context.Context, payload T) (
 //
 // This is a **conscious design choice** to reinforce proper scoping and ownership.
 // If you require shared access, explicitly manage synchronization outside this scope.
-type resumableEffectScope[T any, R any] struct {
-	EffectId string
-	EffectCh chan resumableEffectMessage[T, R]
-	closeFn  func()
-	closed   bool
+type resumableEffectScope[T effectmodel.Partitionable, R any] struct {
+	EffectId  string
+	effectChs []chan resumableEffectMessage[T, R]
+	closeFn   func()
+	closed    bool
 }
 
 func (es *resumableEffectScope[T, R]) Close() {
@@ -80,30 +81,33 @@ func (es *resumableEffectScope[T, R]) Close() {
 	}
 }
 
-func newResumableEffectScope[T any, R any](
+func newResumableEffectScope[T effectmodel.Partitionable, R any](
 	ctx context.Context,
 	config effectmodel.EffectScopeConfig,
 	handleFn func(context.Context, T) R,
 	teardown func(),
 ) *resumableEffectScope[T, R] {
 	ctx, cancelFn := context.WithCancel(ctx)
-	effCh := make(chan resumableEffectMessage[T, R], config.BufferSize)
-
-	go func() {
-		defer close(effCh)
-		for {
-			select {
-			case msg := <-effCh:
-				msg.resumeCh <- handleFn(ctx, msg.payload)
-			case <-ctx.Done():
-				return
+	effChs := make([]chan resumableEffectMessage[T, R], config.NumWorkers)
+	for i := 0; i < config.NumWorkers; i++ {
+		effCh := make(chan resumableEffectMessage[T, R], config.BufferSize)
+		go func(ch chan resumableEffectMessage[T, R]) {
+			defer close(ch)
+			for {
+				select {
+				case msg := <-ch:
+					msg.resumeCh <- handleFn(ctx, msg.payload)
+				case <-ctx.Done():
+					return
+				}
 			}
-		}
-	}()
+		}(effCh)
+		effChs[i] = effCh
+	}
 
 	return &resumableEffectScope[T, R]{
-		EffectId: uuid.New().String(),
-		EffectCh: effCh,
+		EffectId:  uuid.New().String(),
+		effectChs: effChs,
 		closeFn: func() {
 			cancelFn()
 			teardown()
@@ -112,7 +116,7 @@ func newResumableEffectScope[T any, R any](
 	}
 }
 
-type resumableEffectMessage[T any, R any] struct {
+type resumableEffectMessage[T effectmodel.Partitionable, R any] struct {
 	payload  T
 	resumeCh chan R
 }

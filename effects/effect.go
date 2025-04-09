@@ -8,7 +8,7 @@ import (
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 )
 
-func WithResumableEffectHandler[T any, R any](
+func WithResumableEffectHandler[T effectmodel.Partitionable, R any](
 	ctx context.Context,
 	config effectmodel.EffectScopeConfig,
 	enum effectmodel.EffectEnum,
@@ -32,7 +32,11 @@ func WithResumableEffectHandler[T any, R any](
 	}
 }
 
-func PerformResumableEffect[T any, R any](ctx context.Context, enum effectmodel.EffectEnum, payload T) R {
+func PerformResumableEffect[T effectmodel.Partitionable, R any](
+	ctx context.Context,
+	enum effectmodel.EffectEnum,
+	payload T,
+) R {
 	handler := mustGetTypedValue[handlers.ResumableHandler[T, R]](
 		func() (any, error) {
 			return hasHandler(ctx, enum)
@@ -64,7 +68,11 @@ func WithFireAndForgetEffectHandler[T any](
 	}
 }
 
-func FireAndForgetEffect[T any](ctx context.Context, enum effectmodel.EffectEnum, payload T) {
+func FireAndForgetEffect[T any](
+	ctx context.Context,
+	enum effectmodel.EffectEnum,
+	payload T,
+) {
 	handler := mustGetTypedValue[handlers.FireAndForgetHandler[T]](
 		func() (any, error) {
 			return hasHandler(ctx, enum)

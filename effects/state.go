@@ -8,26 +8,45 @@ import (
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 )
 
+var _ statePayload = GetStatePayload{}
+
 type GetStatePayload struct {
 	Key string
 }
 
+func (p GetStatePayload) PartitionKey() string {
+	return p.Key
+}
+
 func (p GetStatePayload) sealedInterface() {}
+
+var _ statePayload = DeleteStatePayload{}
 
 type DeleteStatePayload struct {
 	Key string
 }
 
+func (p DeleteStatePayload) PartitionKey() string {
+	return p.Key
+}
+
 func (p DeleteStatePayload) sealedInterface() {}
+
+var _ statePayload = SetStatePayload{}
 
 type SetStatePayload struct {
 	Key   string
 	Value any
 }
 
+func (p SetStatePayload) PartitionKey() string {
+	return p.Key
+}
+
 func (p SetStatePayload) sealedInterface() {}
 
 type statePayload interface {
+	PartitionKey() string
 	sealedInterface()
 }
 
