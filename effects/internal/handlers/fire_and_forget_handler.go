@@ -38,7 +38,7 @@ func (ffh FireAndForgetHandler[T]) FireAndForgetEffect(ctx context.Context, payl
 
 	select {
 	case <-ctx.Done():
-	case ffh.EffectCh <- fireAndForgetEffectMessage[T]{
+	case ffh.effectCh <- fireAndForgetEffectMessage[T]{
 		payload: payload,
 	}:
 	}
@@ -62,16 +62,16 @@ func (ffh FireAndForgetHandler[T]) FireAndForgetEffect(ctx context.Context, payl
 // If you require shared access, explicitly manage synchronization outside this scope.
 type fireAndForgetEffectScope[T any] struct {
 	EffectId string
-	EffectCh chan fireAndForgetEffectMessage[T]
+	effectCh chan fireAndForgetEffectMessage[T]
 	closeFn  func()
 	closed   bool
 }
 
-func (es *fireAndForgetEffectScope[T]) Close() {
-	if !es.closed {
-		es.closeFn()
+func (ffs *fireAndForgetEffectScope[T]) Close() {
+	if !ffs.closed {
+		ffs.closeFn()
 		// log.
-		es.closed = true
+		ffs.closed = true
 	}
 }
 
@@ -98,7 +98,7 @@ func newFireAndForgetEffectScope[T any](
 
 	return &fireAndForgetEffectScope[T]{
 		EffectId: uuid.New().String(),
-		EffectCh: effCh,
+		effectCh: effCh,
 		closeFn: func() {
 			cancelFn()
 			teardown()

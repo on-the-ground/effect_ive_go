@@ -16,7 +16,7 @@ func WithResumableEffectHandler[T effectmodel.Partitionable, R any](
 	teardown ...func(),
 ) (context.Context, func()) {
 	td := normalizeTeardown(teardown)
-	handler := handlers.NewResumableEffectHandler(ctx, config, handleFn, td)
+	handler := handlers.NewResumablePartitionableEffectHandler(ctx, config, handleFn, td)
 
 	LogEffect(ctx, LogInfo, "created resumable effect handler", map[string]interface{}{
 		"effectId": handler.EffectId,
@@ -37,7 +37,7 @@ func PerformResumableEffect[T effectmodel.Partitionable, R any](
 	enum effectmodel.EffectEnum,
 	payload T,
 ) R {
-	handler := mustGetTypedValue[handlers.ResumableHandler[T, R]](
+	handler := mustGetTypedValue[handlers.ResumablePartitionableHandler[T, R]](
 		func() (any, error) {
 			return hasHandler(ctx, enum)
 		},
@@ -79,6 +79,42 @@ func FireAndForgetEffect[T any](
 		},
 	)
 	handler.FireAndForgetEffect(ctx, payload)
+}
+
+func WithFireAndForgetPartitionableEffectHandler[T effectmodel.Partitionable](
+	ctx context.Context,
+	config effectmodel.EffectScopeConfig,
+	enum effectmodel.EffectEnum,
+	handleFn func(context.Context, T),
+	teardown ...func(),
+) (context.Context, func()) {
+	td := normalizeTeardown(teardown)
+	handler := handlers.NewFireAndForgetPartitionableEffectHandler(ctx, config, handleFn, td)
+	LogEffect(ctx, LogInfo, "created fire/forget effect handler", map[string]interface{}{
+		"effectId": handler.EffectId,
+		"enum":     enum,
+	})
+	ctxWith := context.WithValue(ctx, enum, handler)
+	return ctxWith, func() {
+		handler.Close()
+		LogEffect(ctx, LogInfo, "closed fire/forget effect handler", map[string]interface{}{
+			"effectId": handler.EffectId,
+			"enum":     enum,
+		})
+	}
+}
+
+func FireAndForgetPartitionableEffect[T effectmodel.Partitionable](
+	ctx context.Context,
+	enum effectmodel.EffectEnum,
+	payload T,
+) {
+	handler := mustGetTypedValue[handlers.FireAndForgetPartitionableEffectHandler[T]](
+		func() (any, error) {
+			return hasHandler(ctx, enum)
+		},
+	)
+	handler.FireAndForgetPartitionableEffect(ctx, payload)
 }
 
 func normalizeTeardown(teardown []func()) func() {

@@ -8,34 +8,37 @@ import (
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 )
 
-func NewResumableEffectHandler[T effectmodel.Partitionable, R any](
+func NewResumablePartitionableEffectHandler[T effectmodel.Partitionable, R any](
 	ctx context.Context,
 	config effectmodel.EffectScopeConfig,
 	handleFn func(context.Context, T) R,
 	teardown func(),
-) ResumableHandler[T, R] {
-	return ResumableHandler[T, R]{
-		resumableEffectScope: newResumableEffectScope(ctx, config, handleFn, teardown),
+) ResumablePartitionableHandler[T, R] {
+	return ResumablePartitionableHandler[T, R]{
+		resumablePartitionableEffectScope: newResumablePartitionableEffectScope(ctx, config, handleFn, teardown),
 	}
 }
 
-type ResumableHandler[T effectmodel.Partitionable, R any] struct {
-	*resumableEffectScope[T, R]
+type ResumablePartitionableHandler[T effectmodel.Partitionable, R any] struct {
+	*resumablePartitionableEffectScope[T, R]
 }
 
-func (rh ResumableHandler[T, R]) PerformEffect(ctx context.Context, payload T) (ret R) {
+func (rh ResumablePartitionableHandler[T, R]) PerformEffect(ctx context.Context, payload T) (ret R) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("panic while sending to closed channel for effect: %+v", map[string]interface{}{
-				"effectId": rh.EffectId,
-				"payload":  payload,
-			})
+			log.Printf(
+				"panic while sending to closed channel for effect: %+v",
+				map[string]interface{}{
+					"effectId": rh.EffectId,
+					"payload":  payload,
+				},
+			)
 		}
 	}()
 
 	resumeCh := make(chan R, 1)
 
-	msg := resumableEffectMessage[T, R]{
+	msg := resumablePartitionableEffectMessage[T, R]{
 		payload:  payload,
 		resumeCh: resumeCh,
 	}
@@ -67,31 +70,32 @@ func (rh ResumableHandler[T, R]) PerformEffect(ctx context.Context, payload T) (
 //
 // This is a **conscious design choice** to reinforce proper scoping and ownership.
 // If you require shared access, explicitly manage synchronization outside this scope.
-type resumableEffectScope[T effectmodel.Partitionable, R any] struct {
+type resumablePartitionableEffectScope[T effectmodel.Partitionable, R any] struct {
 	EffectId  string
-	effectChs []chan resumableEffectMessage[T, R]
+	effectChs []chan resumablePartitionableEffectMessage[T, R]
 	closeFn   func()
 	closed    bool
 }
 
-func (es *resumableEffectScope[T, R]) Close() {
+func (es *resumablePartitionableEffectScope[T, R]) Close() {
 	if !es.closed {
 		es.closeFn()
 		es.closed = true
+		log.Printf("Effect scope closed: %s", es.EffectId)
 	}
 }
 
-func newResumableEffectScope[T effectmodel.Partitionable, R any](
+func newResumablePartitionableEffectScope[T effectmodel.Partitionable, R any](
 	ctx context.Context,
 	config effectmodel.EffectScopeConfig,
 	handleFn func(context.Context, T) R,
 	teardown func(),
-) *resumableEffectScope[T, R] {
+) *resumablePartitionableEffectScope[T, R] {
 	ctx, cancelFn := context.WithCancel(ctx)
-	effChs := make([]chan resumableEffectMessage[T, R], config.NumWorkers)
+	effChs := make([]chan resumablePartitionableEffectMessage[T, R], config.NumWorkers)
 	for i := 0; i < config.NumWorkers; i++ {
-		effCh := make(chan resumableEffectMessage[T, R], config.BufferSize)
-		go func(ch chan resumableEffectMessage[T, R]) {
+		effCh := make(chan resumablePartitionableEffectMessage[T, R], config.BufferSize)
+		go func(ch chan resumablePartitionableEffectMessage[T, R]) {
 			defer close(ch)
 			for {
 				select {
@@ -105,7 +109,7 @@ func newResumableEffectScope[T effectmodel.Partitionable, R any](
 		effChs[i] = effCh
 	}
 
-	return &resumableEffectScope[T, R]{
+	return &resumablePartitionableEffectScope[T, R]{
 		EffectId:  uuid.New().String(),
 		effectChs: effChs,
 		closeFn: func() {
@@ -116,7 +120,7 @@ func newResumableEffectScope[T effectmodel.Partitionable, R any](
 	}
 }
 
-type resumableEffectMessage[T effectmodel.Partitionable, R any] struct {
+type resumablePartitionableEffectMessage[T effectmodel.Partitionable, R any] struct {
 	payload  T
 	resumeCh chan R
 }

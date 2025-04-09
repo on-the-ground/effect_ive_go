@@ -57,10 +57,7 @@ func WithConcurrencyEffectHandler(
 	if err != nil {
 		bufferSize = 1
 	}
-	numWorkers, err := GetFromBindingEffect[int](ctx, configkeys.ConfigEffectConcurrencyHandlerNumWorkers)
-	if err != nil {
-		numWorkers = 1
-	}
+	const numWorkers = 1 // number of workers is not configurable for concurrency effect
 
 	wg := &sync.WaitGroup{}
 	var childrenCancels []context.CancelFunc

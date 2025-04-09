@@ -29,5 +29,5 @@ const (
 
 	ConfigEffectConcurrencyHandlerPrefix     = ConfigEffectConcurrencyPrefix + delimiter + "handler"
 	ConfigEffectConcurrencyHandlerBufferSize = ConfigEffectConcurrencyHandlerPrefix + delimiter + "buffer_size"
-	ConfigEffectConcurrencyHandlerNumWorkers = ConfigEffectConcurrencyHandlerPrefix + delimiter + "num_workers"
+	// ConfigEffectConcurrencyHandlerNumWorkers is non-configurable, because it is always set to one.
 )
