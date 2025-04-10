@@ -1,182 +1,243 @@
-# Effect-ive Go
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/bad6f14e-0444-4fbb-ad9d-74131c970568" />
+  <br />
+  <em>“The Zen of the Effect-ive Gopher” – calm, centered, and side-effect free.</em>
+</p>
 
-> *Algebraic Effect Handlers. Idiomatic Go. Functional clarity.*
 
-* * *
+# What is Effect-ive Go?
 
-## 🚧 Experimental Preview
-
-> This project is still **experimental** and under active design. The API is subject to change.It’s being shared early to spark ideas, discussions, and contributions.
-
-* * *
-
-## ✨ What is Effect-ive Go?
-
-**Effect-ive Go** brings **algebraic effect handlers** to the Go world—without monads, CPS, or complex abstractions.
-
-Instead, it uses what Go gives us:
-
-* goroutines
-* channels
-* context
-* duck typing
-
-The result: a system that **isolates side effects**, keeps your core logic **pure**, and supports highly **modular, testable, and reusable** code.
+**Effect-ive Go** is the first attempt to implement _Effect-ive Programming idiomatically in Go_. This project provides a **systematic way to isolate and handle side effects** on top of Go’s core principles—**goroutines**, **channels**, **context**, and **duck typing**.
 
 * * *
 
-## 💡 Why Does This Matter? TODO 예문 변경
+# What is Effect-ive Programming?
 
-In any real-world Go application, you’ve probably seen this: 
+**Effect-ive Programming** is an approach to building _predictable, testable, and reusable code_.
 
-    // Core logic tangled with logging, error handling, auth...
-    if err := authCheck(user); err != nil {
-        log.Println("unauthorized")
-        return fmt.Errorf("...")
-    }
+Its **first-class citizen** is the **Effect Pattern**: the idea is to **identify** impure parts of your logic (=side effects), and **isolate and delegate** them externally.
 
-With effect handlers, you can isolate these effects:
+This is a **pattern-oriented approach**, not tied to any specific language or paradigm, making it applicable in any environment.
 
-    // Core logic
-    return FetchUser(id)
+Effect-ive Programming generally follows three steps:
 
-The actual logging, authorization, or retries happen *elsewhere*.They're **handled**, not **interwoven**.
+* 🔍 **Side effect recognition**: Identify non-pure logic
+* 🧭 **Side effect isolation**: Isolate it into an external handler
+* 📬 **Side effect delegation**: Delegate the effect to the handler
 
 * * *
 
-## ⚠️ Design Philosophy: Effect ≠ Service Locator
+# Why does Effect-ive Programming matter? (TBD)
 
-One of the **biggest misconceptions** when using an effect system is treating it like a *service locator* or *DI container*. This is an anti-pattern.
+→ "Why does this matter?"→ Go-specific challenges → Solved via effect pattern → Real-world cases
 
-> **Effect handlers should not return services or objects with behavior.**
+> ✅ Before / After examples✅ Practical issues in Go: DI, error handling, config, context propagation, etc.
 
-For example, suppose you define a `DependencyEffect` that returns a service object, and then your domain logic calls a method on that service. At first glance, this may seem clean—but it's **worse** than simply injecting dependencies explicitly via parameters or struct fields.
+* * *
 
-Why?
+# What is Effect anyway?
 
-Because now you've **hidden the dependency**, and the domain logic is no longer pure. You're pretending it's decoupled while still relying on an opaque service behind the scenes.
+### 💡 Pure Functions
 
-### ✅ What Should Happen Instead?
+* Executed **immediately upon call**
+* **Deterministic**: Output depends only on input
+* Do **nothing besides returning** the output (no side effects)
 
-The **purpose** of performing an effect is *not* to receive a tool or method for later use.It is to **request that something be done elsewhere**, and to receive the **already completed result**.
+* * *
 
-    // ❌ Anti-pattern
+### ⚠️ Side Effects
+
+* Everything that is **not a pure function**
+* A helpful guide: the **4W Checklist** — if you violate even one, it’s a side effect:
+
+| W   | Question |
+| --- | --- |
+| **Who** | Can someone else trigger this logic? |
+| **What** | Does it mutate external state or return non-deterministic output? |
+| **When** | Is it executed immediately upon call, or deferred? |
+| **Where** | Does the behavior depend on where or under which context it's called? |
+
+* * *
+
+### 🔧 Effect Pattern
+
+The purpose of the effect pattern is simple:
+
+> 💬 _Delegate side effects to external handlers, so your logic remains predictable, testable, and reusable._
+
+#### 🔍 1. Side Effect Recognition
+
+* If even **one of the 4Ws is violated**, it qualifies as a side effect.
+* But **not every side effect should be turned into a new effect**.
+
+##### 🎯 Effect Atomicity Principle
+
+> If a side effect can be composed using existing effects + pure functions, do **not** define a new effect.
+
+* * *
+
+#### 🧭 2. Side Effect Isolation
+
+* Each effect is handled by a **dedicated effect handler**
+* Every handler has a **clear scope**:
+  * Only the closest handler is applied — **no implicit propagation**
+  * Leaving the scope **automatically shuts down** the handler
+  * Handlers **must not leak state** outside their scope
+* **Effect scope should be close to where effects are performed**
+  * Avoid placing all handlers at the composition root
+
+* * *
+
+#### 📬 3. Side Effect Delegation
+
+Delegation is more than passing data — 👉 it’s about **transferring control flow ownership** to the handler.
+
+##### ✳️ There are three types of delegation:
+
+| Type | Description |
+| --- | --- |
+| **Resumable Effect** | Handler processes the effect and **returns the result** to the caller |
+| **Fire-and-Forget** | Handler **executes without waiting**, and the caller resumes immediately |
+| **Abortive Effect** | Handler processes and **aborts caller flow**, e.g., exceptions or panics |
+
+* * *
+
+## 📌 Summary
+
+* An effect is any logic that **depends on context**, has **external interaction**, or violates **pure function guarantees**
+* The **Effect Pattern** provides a structured way to **recognize, isolate, and delegate** them
+* It forms a core foundation for **testable, modular, reusable architecture**
+
+* * *
+
+# How does Effect-ive Go work?
+
+Effect-ive Go is designed around the idea of delegating side effects to dedicated **handlers**. Its core structure can be broken down into three main components:
+
+* * *
+
+## 1. 🧰 Effect Handler
+
+Each handler is responsible for handling a specific type of side effect. All handlers satisfy the following conditions:
+
+* **Scoped**: Handlers are only active within a specific context
+* **Channel-based message handling**: Handlers run in goroutines and communicate through channels
+* **Explicit lifecycle management**: Use `WithXxxEffectHandler(ctx)` to create and `defer cancel()` to release
+* 🔒 **Not thread-safe by design**: Handlers are meant to be used only within a single goroutine to ensure proper scoping
+
+* * *
+
+## 2. 🧭 Effect Scope
+
+Each handler is bound to a specific context.
+
+* Within that context, the effect is **enabled**
+* Once the context is exited, the handler is **automatically shut down**, and no effects can be handled
+
+This guarantees:
+
+* ❌ No handler leaks
+* ❌ No upward propagation of effects (only **explicit delegation** is allowed)
+* ✅ Handler lifecycle is **tracked via context**
+
+* * *
+
+## 3. 🔁 Effect Delegation
+
+Effect-ive Go supports two main delegation models: resumable and fire-and-forget.
+
+| Type | Description | Examples |
+| --- | --- | --- |
+| **Resumable Effect** | Processes the effect and returns the result | Reading config, state access |
+| **Fire-and-Forget** | Executes asynchronously without waiting for a result | Logging, sending events |
+
+→ Both models are implemented using **goroutines + channels**, and delegation always involves handing off **control flow ownership** at the point of `perform`.
+
+* * *
+
+### 🔍 Example Flow
+
+    1. A handler scope is created with `WithStateEffectHandler(ctx)`
+    2. Internally, a handler goroutine is spawned and waits on a `chan`
+    3. Domain logic calls `PerformResumableEffect(ctx, EffectState, payload)`
+    4. Handler processes the effect and sends result back on `resumeCh`
+    5. Caller resumes execution with the result
+
+* * *
+
+### 📌 Additional Design Notes
+
+* Handlers are registered into context using **EffectEnum** as a key
+* Hash partitioning is supported via the `Partitionable` interface
+* Designed to be **panic-safe**, **explicitly terminated**, and **single-threaded** for maximum predictability
+
+* * *
+
+# How can I make custom effects? (TBD)
+
+→ Guide for users to define their own effect handlers→ How to apply scope and implement custom logic
+
+* * *
+
+# Built-in Effects
+
+| Effect | Type | Handler Responsibility |
+| --- | --- | --- |
+| 🧠 `State` | **Resumable** | Manage key-value state across goroutines<br>Sharded with `Partitionable` |
+| 🔗 `Binding` | **Resumable** | Lookup config/flags/envs, with upper-scope fallback |
+| 🧵 `Concurrency` | **Fire-and-Forget** | Spawn goroutines, gracefully terminate on cancel |
+| 📝 `Log` | **Fire-and-Forget** | Async log emission via zap logger; ordering via `numWorkers = 1` |
+
+* * *
+
+# Effect-ive Programming vs Traditional Patterns
+
+## 🧠 vs Functional Programming
+
+* Shares the same goal as FP: isolating impurity for predictable, testable code
+* Does not enforce everything to be pure functions chained by composition
+* Focuses on **recognition and delegation** of effects through **Effect Pattern**, not the implementation style
+
+* * *
+
+## ⚙️ vs Monad-based Systems
+
+* Monads chain effectful computations but introduce complexity
+* Composing multiple effects (e.g., `Eff1[Eff2[T]]`) breaks intuition
+* Algebraic Effect Handlers emerged to fix this
+* **Effect-ive Programming** offers a **pragmatic and idiomatic** alternative
+
+* * *
+
+## 🧭 vs Effect Handler-Oriented Programming
+
+| Aspect | Effect-ive Programming | EH-Oriented Programming |
+| --- | --- | --- |
+| **Goal** | Practical side effect isolation (SoC, testability, reuse) | Algebraic Effect abstraction at compiler level |
+| **Handler Role** | Scope-bound isolation using goroutine/context/channel | Control flow rewiring via CPS |
+| **Implementation** | Stays idiomatic (Go-specific) | Requires new features (CPS, algebraic effect) |
+| **Design Limit** | Stays within language boundaries | Needs runtime/compiler support |
+| **Recognition** | Based on 4W: Who, What, When, Where | Transformed effect contexts |
+| **Use Cases** | Real-world concerns (log, state, cache, config, concurrency) | Language effects (exceptions, yield, fibers) |
+
+* * *
+
+## 🔌 vs Dependency Injection Frameworks
+
+**Using effect systems like a DI container is a common anti-pattern.**
+
+> 🛑 You should not return a service — just request an action and receive the result.
+
+### ❌ Anti-pattern
+
     svc := PerformEffect(ctx, EffectDependency)
     return svc.DoSomething()
-    
-    // ✅ Proper usage
+
+### ✅ Proper Usage
+
     result := PerformEffect(ctx, EffectDoSomething, input)
     return result
 
-This ensures that the **core logic is completely separated** from how the effect is handled.
+Effect systems are not about **injecting helpers** — they’re about **requesting side effects** and **receiving results**.
 
-Effect systems are powerful because they let us **invert dependency direction** and enforce a clean **Separation of Concerns**. That only works if the **entire side effect is handled externally**, and domain logic **just receives the outcome**.
-
-> 🧠 **Effect systems are not about "getting a thing to do a job"—they're about *asking* for the job to be done, and getting back the answer.**
-
-* * *
-
-## ⚠️ Avoid Global Handlers
-> Are you planning to handle every error in your system the same way?
-> Or put all your cached data into a single shared cache?
-> Probably not.
-
-Effect handlers are scoped.
-And their power comes from locality—handling side effects close to where they happen.
-
-Instead of defining a single, global handler at the composition root, ask:
-
-- “What’s the best way to log right here?”
-- “How should I handle errors in this function?”
-- “Does this service need a retry logic that others don’t?”
-
-Handlers can (and should) be redeclared at different depths.
-That’s not duplication—it’s precision.
-
-The nearest handler always wins.
-That’s the point.
-
-> Don’t treat effect handlers as global DI containers.
-> Treat them as localized interpreters that make your code more expressive and intentional.
-
-
-* * *
-
-## 📦 Key Concepts
-
-* **PerformEffect / WithEffect**: Register handlers and perform effects via `context`
-* **Effect Enum**: Identify each effect type (e.g. `EffectLog`, `EffectConcurrency`)
-* **Effect Scoping**: Handlers are scoped using `context.WithValue`, forming an implicit effect stack.
-* **EffectStack**: Each goroutine owns its own stack. Handlers are resolved from nearest to root.
-* **Teardown**: Each handler ensures end-of-scope cleanup. It must be idempotent.
-
-* * *
-
-## 🧪 Test Philosophy
-
-Our tests aim to cover:
-
-* Scoping and propagation
-* Goroutine-level isolation
-* Cancellation behavior
-* Proper teardown invocation
-* Panic safety
-* Context-based resolution
-
-Tests use **artificial effect types** for clarity.Real-world examples come in `/examples`.
-
-* * *
-
-## 🧰 Status
-
-| Feature | Status |
-| --- | --- |
-| 🔹 `WithEffect`, `PerformEffect` | ✅ Stable |
-| 🔸 `ConcurrencyEffect` (goroutine orchestration) | ✅ Experimental |
-| 🔸 Test coverage | ⏳ Ongoing |
-| 🔸 Examples | ⏳ Planned |
-| 🔸 Cancellable resource effects | 🧪 Under review |
-
-* * *
-
-## 📎 How This Is Different
-
-* **No monads**.
-* **No continuation-passing style**.
-* **No macros or code-gen**.
-
-Only Go. Only idioms you already know.
-
-    ctx := context.WithValue(ctx, EffectLog, myHandler)
-    PerformEffect(ctx, EffectLog, "logging this event")
-
-
-* * *
-
-## 📬 Contributing
-
-Want to help?
-
-* Raise issues or ideas.
-* Share your use case.
-* Or just play with it and tell us what’s missing.
-
-Together, we can shape a new way of writing Go.
-
-* * *
-
-## 🙏 Acknowledgements
-
-Built on the insights of:
-
-* [Arrow-KT](https://arrow-kt.io/)
-* [Ocaml5](https://ocaml.org/manual/5.3/effects.html)
-* [Go's beautiful simplicity]
-
-And the realization that **purity doesn't need to be painful.**
-
-* * *
-
-## 🕊 License
-
-MIT
+> 🧠 Don't “get something to do the job”—instead, “ask for the job to be done.”
