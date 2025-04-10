@@ -283,3 +283,9 @@ That’s why careful code review and testing is essential when using dynamic eff
 Effect systems are not about **injecting helpers** — they’re about **requesting side effects** and **receiving results**.
 
 > 🧠 Don't “get something to do the job”—instead, “ask for the job to be done.”
+* * *
+> 🧘‍♂️ Effect-ive Go follows “[The Zen of Go](https://the-zen-of-go.netlify.app/)”
+> Designed with simplicity, clarity, and maintainability at heart.
+> From scope lifecycle to panic safety, every decision is deliberate.
+> Because Go deserves idiomatic effect handling — with Zen.
+* * *
