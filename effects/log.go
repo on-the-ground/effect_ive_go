@@ -8,21 +8,34 @@ import (
 	"go.uber.org/zap"
 )
 
+// LogLevel defines the severity level for log messages.
 type LogLevel string
 
 const (
-	LogInfo  LogLevel = "info"
-	LogWarn  LogLevel = "warn"
+	// LogInfo is used for general informational messages.
+	LogInfo LogLevel = "info"
+
+	// LogWarn is used for potentially harmful situations.
+	LogWarn LogLevel = "warn"
+
+	// LogError is used for error events that might still allow the application to continue running.
 	LogError LogLevel = "error"
+
+	// LogDebug is used for debugging messages with detailed internal information.
 	LogDebug LogLevel = "debug"
 )
 
+// LogPayload is the payload structure for logging effect.
+// It contains the log level, message string, and optional structured fields.
 type LogPayload struct {
 	Level   LogLevel
 	Message string
 	Fields  map[string]interface{}
 }
 
+// WithZapLogEffectHandler registers a fire-and-forget log effect handler using zap.Logger.
+// It reads buffer size and worker count from the binding effect configuration.
+// The returned context includes the handler under the EffectLog enum.
 func WithZapLogEffectHandler(ctx context.Context, logger *zap.Logger) (context.Context, func()) {
 	bufferSize, err := GetFromBindingEffect[int](ctx, configkeys.ConfigEffectLogHandlerBufferSize)
 	if err != nil {
@@ -58,6 +71,8 @@ func WithZapLogEffectHandler(ctx context.Context, logger *zap.Logger) (context.C
 	)
 }
 
+// LogEffect performs a fire-and-forget log effect using the EffectLog handler in the context.
+// This should be used to emit structured logs within an effect-managed execution scope.
 func LogEffect(ctx context.Context, level LogLevel, msg string, fields map[string]interface{}) {
 	FireAndForgetEffect(ctx, effectmodel.EffectLog, LogPayload{
 		Level:   level,

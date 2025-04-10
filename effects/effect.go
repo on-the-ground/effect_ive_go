@@ -8,15 +8,24 @@ import (
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 )
 
-func WithResumableEffectHandler[T effectmodel.Partitionable, R any](
+// WithResumablePartitionableEffectHandler registers a resumable effect handler for a given effect enum.
+//
+// This handler supports hash-based partitioning via PartitionKey(), and is suitable for effects
+// like state updates or messaging systems where per-key ordering matters.
+//
+// Usage:
+//
+//	ctx, cancel := WithResumablePartitionableEffectHandler(ctx, config, MyEffectEnum, handleFn)
+//	defer cancel()
+func WithResumablePartitionableEffectHandler[T effectmodel.Partitionable, R any](
 	ctx context.Context,
 	config effectmodel.EffectScopeConfig,
 	enum effectmodel.EffectEnum,
-	handleFn func(context.Context, T) R,
+	handleFn func(context.Context, handlers.ResumableEffectMessage[T, R]),
 	teardown ...func(),
 ) (context.Context, func()) {
 	td := normalizeTeardown(teardown)
-	handler := handlers.NewResumablePartitionableEffectHandler(ctx, config, handleFn, td)
+	handler := handlers.NewPartitionableResumableHandler(ctx, config, handleFn, td)
 
 	LogEffect(ctx, LogInfo, "created resumable effect handler", map[string]interface{}{
 		"effectId": handler.EffectId,
@@ -32,12 +41,16 @@ func WithResumableEffectHandler[T effectmodel.Partitionable, R any](
 	}
 }
 
+// PerformResumableEffect sends a payload to the resumable effect handler and waits for the result.
+//
+// It returns the value sent through resumeCh by the handler logic.
+// Panics if no handler is registered for the given effect enum.
 func PerformResumableEffect[T effectmodel.Partitionable, R any](
 	ctx context.Context,
 	enum effectmodel.EffectEnum,
 	payload T,
 ) R {
-	handler := mustGetTypedValue[handlers.ResumablePartitionableHandler[T, R]](
+	handler := mustGetTypedValue[handlers.ResumableHandler[T, R]](
 		func() (any, error) {
 			return hasHandler(ctx, enum)
 		},
@@ -45,6 +58,10 @@ func PerformResumableEffect[T effectmodel.Partitionable, R any](
 	return handler.PerformEffect(ctx, payload)
 }
 
+// WithFireAndForgetEffectHandler registers a fire-and-forget effect handler for a given effect enum.
+//
+// Suitable for one-shot effects like logging, telemetry, or background publishing.
+// This handler executes without returning a result.
 func WithFireAndForgetEffectHandler[T any](
 	ctx context.Context,
 	config effectmodel.EffectScopeConfig,
@@ -53,7 +70,7 @@ func WithFireAndForgetEffectHandler[T any](
 	teardown ...func(),
 ) (context.Context, func()) {
 	td := normalizeTeardown(teardown)
-	handler := handlers.NewFireAndForgetEffectHandler(ctx, config, handleFn, td)
+	handler := handlers.NewFireAndForgetHandler(ctx, config, handleFn, td)
 	LogEffect(ctx, LogInfo, "created fire/forget effect handler", map[string]interface{}{
 		"effectId": handler.EffectId,
 		"enum":     enum,
@@ -68,6 +85,10 @@ func WithFireAndForgetEffectHandler[T any](
 	}
 }
 
+// FireAndForgetEffect triggers a fire-and-forget effect for the given enum and payload.
+//
+// The handler will process the payload asynchronously.
+// Panics if no handler is registered for the given enum.
 func FireAndForgetEffect[T any](
 	ctx context.Context,
 	enum effectmodel.EffectEnum,
@@ -81,6 +102,10 @@ func FireAndForgetEffect[T any](
 	handler.FireAndForgetEffect(ctx, payload)
 }
 
+// WithFireAndForgetPartitionableEffectHandler registers a partitioned fire-and-forget handler.
+//
+// Hash-based dispatching ensures that effects with the same PartitionKey() are handled
+// by the same goroutine. Useful for ensuring ordering by key.
 func WithFireAndForgetPartitionableEffectHandler[T effectmodel.Partitionable](
 	ctx context.Context,
 	config effectmodel.EffectScopeConfig,
@@ -89,7 +114,7 @@ func WithFireAndForgetPartitionableEffectHandler[T effectmodel.Partitionable](
 	teardown ...func(),
 ) (context.Context, func()) {
 	td := normalizeTeardown(teardown)
-	handler := handlers.NewFireAndForgetPartitionableEffectHandler(ctx, config, handleFn, td)
+	handler := handlers.NewPartitionableFireAndForgetHandler(ctx, config, handleFn, td)
 	LogEffect(ctx, LogInfo, "created fire/forget effect handler", map[string]interface{}{
 		"effectId": handler.EffectId,
 		"enum":     enum,
@@ -104,19 +129,9 @@ func WithFireAndForgetPartitionableEffectHandler[T effectmodel.Partitionable](
 	}
 }
 
-func FireAndForgetPartitionableEffect[T effectmodel.Partitionable](
-	ctx context.Context,
-	enum effectmodel.EffectEnum,
-	payload T,
-) {
-	handler := mustGetTypedValue[handlers.FireAndForgetPartitionableEffectHandler[T]](
-		func() (any, error) {
-			return hasHandler(ctx, enum)
-		},
-	)
-	handler.FireAndForgetPartitionableEffect(ctx, payload)
-}
-
+// normalizeTeardown flattens optional teardown functions into a single callable.
+//
+// Accepts either 0 or 1 teardown functions. Panics if more than one is passed.
 func normalizeTeardown(teardown []func()) func() {
 	switch len(teardown) {
 	case 1:
@@ -124,6 +139,6 @@ func normalizeTeardown(teardown []func()) func() {
 	case 0:
 		return func() {}
 	default:
-		panic("Too many teardown functions")
+		panic("normalizeTeardown: only one teardown function allowed")
 	}
 }

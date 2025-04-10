@@ -8,6 +8,10 @@ import (
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 )
 
+// spawnConcurrentChildren starts each function in its own goroutine with its own context.
+// - Each child gets its own cancellable context.
+// - Adds the goroutine to the WaitGroup for tracking.
+// - Catches and logs panics individually.
 func spawnConcurrentChildren(wg *sync.WaitGroup, childrenCancels *[]context.CancelFunc, functions []func(context.Context)) {
 	numRoutines := len(functions)
 	*childrenCancels = make([]context.CancelFunc, numRoutines)
@@ -31,6 +35,8 @@ func spawnConcurrentChildren(wg *sync.WaitGroup, childrenCancels *[]context.Canc
 	}
 }
 
+// waitChildren blocks until all child goroutines complete or the context is cancelled.
+// - If cancelled, invokes all child cancel functions to propagate cancellation.
 func waitChildren(ctx context.Context, wg *sync.WaitGroup, childrenCancels []context.CancelFunc) {
 	waitCh := make(chan struct{})
 	go func() {
@@ -50,6 +56,13 @@ func waitChildren(ctx context.Context, wg *sync.WaitGroup, childrenCancels []con
 	}
 }
 
+// WithConcurrencyEffectHandler installs a fire-and-forget concurrency effect handler.
+//
+// It allows `ConcurrencyEffect(ctx, [...])` to spawn multiple goroutines under managed scope.
+//
+// - Buffer size is configurable via binding effect.
+// - WaitGroup + cancellation tracking ensures children are joined on shutdown.
+// - Worker count is fixed to 1 (non-partitioned).
 func WithConcurrencyEffectHandler(
 	ctx context.Context,
 ) (context.Context, func()) {
@@ -77,6 +90,13 @@ func WithConcurrencyEffectHandler(
 	return ctx, endOfConcurrency
 }
 
+// WithConcurrencyEffectHandler installs a fire-and-forget concurrency effect handler.
+//
+// It allows `ConcurrencyEffect(ctx, [...])` to spawn multiple goroutines under managed scope.
+//
+// - Buffer size is configurable via binding effect.
+// - WaitGroup + cancellation tracking ensures children are joined on shutdown.
+// - Worker count is fixed to 1 (non-partitioned).
 func ConcurrencyEffect(ctx context.Context, payload []func(context.Context)) {
 	FireAndForgetEffect(ctx, effectmodel.EffectConcurrency, payload)
 }
