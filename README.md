@@ -176,13 +176,13 @@ In handler-based systems, effects are reflected by the presence of handler types
 This means that every function, from the one that performs the effect to the one that handles it, must reveal the effect type in its signature.
 However, Go lacks certain language features that make this kind of typing feasible:
 
-❌ No sum types (tagged unions)
-❌ No annotations or decorators to mark effect usage
-❌ Function signatures can’t express anything beyond parameters and return values
+* ❌ No sum types (tagged unions)
+* ❌ No annotations or decorators to mark effect usage
+* ❌ Function signatures can’t express anything beyond parameters and return values
 
 ✅ Effect-ive Go introduces two complementary strategies:
 
-1️⃣ Effect-ive Lint (Static Analysis + Comment Injection)
+### 1️⃣ Effect-ive Lint (Static Analysis + Comment Injection)
 
 A proposed tool will statically analyze the call stack from effect site to handler, and inject comments like this:
 
@@ -193,7 +193,7 @@ func MyServiceFunc(...) { ... }
 
 At the composition root, if these comments remain, it means the handler for that effect is missing.
 
-2️⃣ Die Loudly (Runtime Safety Net)
+### 2️⃣ Die Loudly (Runtime Safety Net)
 
 If an effect is performed without a handler in scope, the ideal behavior would be a compile-time failure.
 Since Go doesn’t support this, Effect-ive Go panics at runtime instead.
