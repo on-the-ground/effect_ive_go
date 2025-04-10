@@ -165,6 +165,48 @@ Effect-ive Go supports two main delegation models: resumable and fire-and-forget
 
 * * *
 
+## 4. 🧠 Declaring Effects Explicitly
+
+Another important role of Effect-ive Programming is to explicitly surface all effects that occur within a given function.
+In statically-typed languages with strong type inference, not only the kind of effects, but even their payload types can be reflected directly in function signatures.
+
+In monadic systems, effects are expressed in the return type.
+In handler-based systems, effects are reflected by the presence of handler types in the context or surrounding scope.
+
+This means that every function, from the one that performs the effect to the one that handles it, must reveal the effect type in its signature.
+However, Go lacks certain language features that make this kind of typing feasible:
+
+❌ No sum types (tagged unions)
+❌ No annotations or decorators to mark effect usage
+❌ Function signatures can’t express anything beyond parameters and return values
+
+✅ Effect-ive Go introduces two complementary strategies:
+
+1️⃣ Effect-ive Lint (Static Analysis + Comment Injection)
+
+A proposed tool will statically analyze the call stack from effect site to handler, and inject comments like this:
+
+```go
+// @effect: Log, State, Config
+func MyServiceFunc(...) { ... }
+```
+
+At the composition root, if these comments remain, it means the handler for that effect is missing.
+
+2️⃣ Die Loudly (Runtime Safety Net)
+
+If an effect is performed without a handler in scope, the ideal behavior would be a compile-time failure.
+Since Go doesn’t support this, Effect-ive Go panics at runtime instead.
+
+This “die loudly” approach ensures that missing handlers are detected early during development and testing.
+
+But caution:
+In rarely executed branches, an unhandled effect might sneak into production.
+That’s why careful code review and testing is essential when using dynamic effect systems in Go.
+
+
+* * *
+
 ### 📌 Additional Design Notes
 
 * Handlers are registered into context using **EffectEnum** as a key
