@@ -1,23 +1,54 @@
-// Package effects implements a minimal effect handler system for Go.
+// Package effects provides a minimal and idiomatic effect system for Go.
 //
-// Inspired by algebraic effects in languages like OCaml, Koka, and Arrow in Kotlin,
-// this package explores how effect isolation can be idiomatically expressed in Go,
-// using goroutines and channels instead of continuations.
+// Effect-ive Go introduces the Effect Pattern to isolate and delegate side effects
+// — such as logging, state, concurrency, and configuration — to dedicated handlers,
+// while keeping your business logic pure, testable, and reusable.
 //
-// This package is intended as a philosophical and practical supplement to
-// https://go.dev/doc/effective_go – where effects are not covered explicitly.
+// # What is an Effect?
 //
-// # Overview
+// An effect is any logic that:
+//   - depends on runtime context,
+//   - causes external interaction,
+//   - or violates pure function guarantees (Who, What, When, Where).
 //
-// The core concepts include:
+// # Why use Effect-ive Go?
 //
-//   - TBD
+// Go doesn’t support sum types or native effect systems, but it does offer
+// goroutines, channels, and context. Effect-ive Go leverages these idioms
+// to implement a scoped, explicit, and panic-safe system for effect delegation.
 //
-// # Why This Matters
+// Benefits include:
+//   - Predictable control flow (no hidden side effects)
+//   - Testable logic (handlers can be mocked or omitted)
+//   - Reusable core logic (no coupling to runtime)
+//   - Explicit scoping and handler lifecycle via context
 //
-// Error handling, logging, dependency injection, and concurrency boundaries are
-// often handled inconsistently. By isolating effects, we can test, reason about,
-// and reuse logic more safely and expressively.
+// # How does it work?
 //
-// See examples for usage.
+// Handlers are registered via `WithXxxEffectHandler(ctx)` and perform effects
+// through `PerformResumableEffect`, `FireAndForgetEffect`, etc.
+// Delegation is type-safe, scope-bound, and never implicit.
+//
+// This package exports:
+//   - Built-in handlers (log, state, binding, concurrency)
+//   - Reusable helper types (payloads, enums, handler interfaces)
+//   - Core effect system to define your own
+//
+// # Design Philosophy
+//
+// Effect-ive Go embraces:
+//   - Separation of concerns via handler isolation
+//   - Simplicity, clarity, and lifecycle safety
+//   - The Zen of Go: maintainability over magic
+//
+// For more: see README.md or visit the Effect-ive Go GitHub page.
+//
+// Example:
+//
+//	func handler(ctx context.Context) {
+//	    ctx, end := effects.WithStateEffectHandler(ctx, nil)
+//	    defer end()
+//
+//	    effects.StateEffect(ctx, effects.SetStatePayload{Key: "foo", Value: "bar"})
+//	}
 package effects
