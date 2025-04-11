@@ -119,9 +119,9 @@ Delegation is more than passing data — 👉 it’s about **transferring contro
 
 | Type | Description |
 | --- | --- |
-| **Resumable Effect** | Handler processes the effect and **returns the result** to the caller |
-| **Fire-and-Forget** | Handler **executes without waiting**, and the caller resumes immediately |
-| **Abortive Effect** | Handler processes and **aborts caller flow**, e.g., exceptions or panics |
+| **Resumable Effect** | The handler processes the effect and returns the result to the initiator, who waits for the handling to complete before resuming. |
+| **Fire-and-Forget** | The initiator triggers the effect and resumes immediately, without waiting for the handler to finish processing. |
+| **Abortive Effect** | The handler processes the effect and terminates the initiator's flow, e.g., by raising a panic or error that escapes the current scope. |
 
 * * *
 
