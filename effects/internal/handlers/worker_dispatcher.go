@@ -8,27 +8,25 @@ import (
 
 // --- common interface ---
 
-type queue[T any] interface {
-	getChannelOf(msg T) chan T
+type WorkerDispatcher[T any] interface {
+	GetChannelOf(msg T) chan T
 }
 
 // --- single queue ---
-
-var _ queue[any] = singleQueue[any]{}
 
 type singleQueue[T any] struct {
 	effectCh chan T
 }
 
-func (q singleQueue[T]) getChannelOf(_ T) chan T {
+func (q singleQueue[T]) GetChannelOf(_ T) chan T {
 	return q.effectCh
 }
 
-func newSingleQueue[T any](
+func NewSingleQueue[T any](
 	ctx context.Context,
 	bufferSize int,
 	handleFn func(context.Context, T),
-) singleQueue[T] {
+) WorkerDispatcher[T] {
 	effCh := make(chan T, bufferSize)
 	go func(ch chan T) {
 		defer close(ch)
@@ -46,22 +44,20 @@ func newSingleQueue[T any](
 
 // --- partitioned queue ---
 
-var _ queue[effectmodel.Partitionable] = partitionedQueue[effectmodel.Partitionable]{}
-
 type partitionedQueue[T effectmodel.Partitionable] struct {
 	effectChs []chan T
 }
 
-func (pq partitionedQueue[T]) getChannelOf(msg T) chan T {
+func (pq partitionedQueue[T]) GetChannelOf(msg T) chan T {
 	idx := getIndexByHash(msg, len(pq.effectChs))
 	return pq.effectChs[idx]
 }
 
-func newPartitionedQueue[T effectmodel.Partitionable](
+func NewPartitionedQueue[T effectmodel.Partitionable](
 	ctx context.Context,
 	numWorkers, bufferSize int,
 	handleFn func(context.Context, T),
-) partitionedQueue[T] {
+) WorkerDispatcher[T] {
 	channels := make([]chan T, numWorkers)
 	for i := 0; i < numWorkers; i++ {
 		ch := make(chan T, bufferSize)

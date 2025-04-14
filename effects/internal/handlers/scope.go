@@ -25,7 +25,7 @@ import (
 // If you require shared access, explicitly manage synchronization outside this scope.
 type effectScope[T any] struct {
 	EffectId string
-	queue    queue[T]
+	queue    WorkerDispatcher[T]
 	closeFn  func()
 	closed   bool
 }
@@ -40,7 +40,7 @@ func (es *effectScope[T]) Close() {
 
 func newEffectScope[T any](
 	ctx context.Context,
-	queue queue[T],
+	queue WorkerDispatcher[T],
 	teardown func(),
 ) *effectScope[T] {
 	return &effectScope[T]{
