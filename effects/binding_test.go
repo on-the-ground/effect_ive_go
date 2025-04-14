@@ -9,19 +9,12 @@ import (
 
 	"github.com/on-the-ground/effect_ive_go/effects"
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestBindingEffect_BasicLookup(t *testing.T) {
 	ctx := context.Background()
 
-	core, _ := observer.New(zap.DebugLevel)
-	ctx, endOfLog := effects.WithZapLogEffectHandler(
-		ctx,
-		effectmodel.NewEffectScopeConfig(1, 1),
-		zap.New(core),
-	)
+	ctx, endOfLog := WithTestLogEffectHandler(ctx)
 	defer endOfLog()
 
 	ctx, closeFn := effects.WithBindingEffectHandler(
@@ -44,12 +37,7 @@ func TestBindingEffect_BasicLookup(t *testing.T) {
 
 func TestBindingEffect_KeyNotFound(t *testing.T) {
 	ctx := context.Background()
-	core, _ := observer.New(zap.DebugLevel)
-	ctx, endOfLog := effects.WithZapLogEffectHandler(
-		ctx,
-		effectmodel.NewEffectScopeConfig(1, 1),
-		zap.New(core),
-	)
+	ctx, endOfLog := WithTestLogEffectHandler(ctx)
 	defer endOfLog()
 	ctx, closeFn := effects.WithBindingEffectHandler(
 		ctx,
@@ -69,12 +57,7 @@ func TestBindingEffect_KeyNotFound(t *testing.T) {
 func TestBindingEffect_DelegatesToUpperScope(t *testing.T) {
 	ctx := context.Background()
 
-	core, _ := observer.New(zap.DebugLevel)
-	ctx, endOfLog := effects.WithZapLogEffectHandler(
-		ctx,
-		effectmodel.NewEffectScopeConfig(1, 1),
-		zap.New(core),
-	)
+	ctx, endOfLog := WithTestLogEffectHandler(ctx)
 	defer endOfLog()
 
 	upperCtx, upperClose := effects.WithBindingEffectHandler(
@@ -106,12 +89,7 @@ func TestBindingEffect_DelegatesToUpperScope(t *testing.T) {
 func TestBindingEffect_ConcurrentPartitionedAccess(t *testing.T) {
 	ctx := context.Background()
 
-	core, _ := observer.New(zap.DebugLevel)
-	ctx, endOfLog := effects.WithZapLogEffectHandler(
-		ctx,
-		effectmodel.NewEffectScopeConfig(1, 1),
-		zap.New(core),
-	)
+	ctx, endOfLog := WithTestLogEffectHandler(ctx)
 	defer endOfLog()
 
 	// prepare key-value map

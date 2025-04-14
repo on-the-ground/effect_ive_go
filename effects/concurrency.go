@@ -11,21 +11,21 @@ import (
 // - Each child gets its own cancellable context.
 // - Adds the goroutine to the WaitGroup for tracking.
 // - Catches and logs panics individually.
-func spawnConcurrentChildren(wg *sync.WaitGroup, childrenCancels *[]context.CancelFunc, functions []func(context.Context)) {
+func spawnConcurrentChildren(parentContext context.Context, wg *sync.WaitGroup, functions []func(context.Context)) {
 	ready := sync.WaitGroup{}
 	numRoutines := len(functions)
-	*childrenCancels = make([]context.CancelFunc, numRoutines)
+	childrenCancels := make([]context.CancelFunc, numRoutines)
 
 	for idx, fn := range functions {
 		childCtx, cancel := context.WithCancel(context.Background())
-		(*childrenCancels)[idx] = cancel
+		childrenCancels[idx] = cancel
 		wg.Add(1)
 		ready.Add(1)
 		go func(f func(context.Context), ctx context.Context) {
 			defer wg.Done()
 			defer func() {
 				if r := recover(); r != nil {
-					LogEffect(ctx, LogError, "panic in child routine", map[string]interface{}{
+					LogEffect(parentContext, LogError, "panic in child routine", map[string]interface{}{
 						"routine": f,
 						"error":   r,
 					})
@@ -35,12 +35,25 @@ func spawnConcurrentChildren(wg *sync.WaitGroup, childrenCancels *[]context.Canc
 			f(ctx)
 		}(fn, childCtx)
 	}
+
+	wg.Add(1)
+	ready.Add(1)
+	go func() {
+		defer wg.Done()
+		ready.Done()
+		<-parentContext.Done()
+		LogEffect(parentContext, LogInfo, "context cancelled, waiting for all routines to finish", nil)
+		for _, cancelFn := range childrenCancels {
+			cancelFn()
+		}
+	}()
+
 	ready.Wait()
 }
 
 // waitChildren blocks until all child goroutines complete or the context is cancelled.
 // - If cancelled, invokes all child cancel functions to propagate cancellation.
-func waitChildren(ctx context.Context, wg *sync.WaitGroup, childrenCancels []context.CancelFunc) {
+func waitChildren(ctx context.Context, wg *sync.WaitGroup) {
 	waitCh := make(chan struct{})
 	ready := make(chan struct{})
 	go func() {
@@ -51,15 +64,8 @@ func waitChildren(ctx context.Context, wg *sync.WaitGroup, childrenCancels []con
 	}()
 	<-ready
 
-	select {
-	case <-waitCh:
-		LogEffect(ctx, LogInfo, "all routines finished", nil)
-	case <-ctx.Done():
-		LogEffect(ctx, LogInfo, "context cancelled, waiting for all routines to finish", nil)
-		for _, cancelFn := range childrenCancels {
-			cancelFn()
-		}
-	}
+	<-waitCh
+	LogEffect(ctx, LogInfo, "all routines finished", nil)
 }
 
 // WithConcurrencyEffectHandler installs a fire-and-forget concurrency effect handler.
@@ -76,17 +82,16 @@ func WithConcurrencyEffectHandler(
 	const numWorkers = 1 // number of workers is not configurable for concurrency effect
 
 	wg := &sync.WaitGroup{}
-	var childrenCancels []context.CancelFunc
 
 	ctx, endOfConcurrency := WithFireAndForgetEffectHandler(
 		ctx,
 		effectmodel.NewEffectScopeConfig(bufferSize, numWorkers),
 		effectmodel.EffectConcurrency,
 		func(ctx context.Context, payload []func(context.Context)) {
-			spawnConcurrentChildren(wg, &childrenCancels, payload)
+			spawnConcurrentChildren(ctx, wg, payload)
 		},
 		func() {
-			waitChildren(ctx, wg, childrenCancels)
+			waitChildren(ctx, wg)
 		},
 	)
 
