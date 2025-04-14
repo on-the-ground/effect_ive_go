@@ -376,17 +376,32 @@ Because they **do not block** and **do not depend on return values**, they’re 
 
 * * *
 
-## 5. Error Propagation & Context-Awareness
+## 🤔 Why is there no `RaiseEffect`?
 
-### 🔴 Before
+Some languages treat exceptions or errors as **effects**—an unexpected break from the normal execution flow. But Go's approach is fundamentally different, which is why Effect-ive Go does **not** provide a built-in `RaiseEffect`.
 
-    req, _ := http.NewRequest("GET", url, nil)
-    resp, err := http.DefaultClient.Do(req)
+### Here's why:
 
-### ✅ After (Effect-ive)
+- ✅ **In Go, errors are values.**
+    
+    Errors are part of the regular return values (`val, err := ...`). They're not magical, and they don’t break flow like exceptions.
+    
+- ✅ **Go supports multiple return values.**
+    
+    Unlike most languages (Java, Python, etc.) that return only a single value, Go can return a result and an error side-by-side. This removes the need for an external `RaiseEffect`.
+    
+- ✅ **Error handling is not an effect in Go's model.**
+    
+    Effects typically represent **external interactions** or **non-determinism** (e.g., time, I/O, logging). In contrast, Go treats errors as part of deterministic flow: they propagate up as values.
+    
+- ✅ **Errors in Go are not "events".**
+    
+    They’re not thrown and caught like in other languages. They're wrapped, enriched with context, and passed up the call chain explicitly.
+    
 
-    // In an isolated effect handler with context and retry/backoff policies
-    PerformResumableEffect(ctx, EffectNetwork, NewHTTPRequest(url))
+So, while effect systems in other languages (like Kotlin or OCaml 5) must model error propagation as an effect, Go's idioms make this unnecessary.
+
+> 📌 If your app is raising exceptions as control flow, reconsider. In Go, **explicit error returns** remain idiomatic—and Effect-ive Go encourages this clarity.
 
 * * *
 
