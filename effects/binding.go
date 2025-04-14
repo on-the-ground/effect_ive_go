@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/on-the-ground/effect_ive_go/effects/configkeys"
 	"github.com/on-the-ground/effect_ive_go/effects/internal/handlers"
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 )
@@ -34,16 +33,11 @@ type BindingResult struct {
 // - If no config is found, defaults are used (bufferSize = 1, numWorkers = 1).
 // - Accepts a key-value map used for lookups.
 // - Allows fallback to upper scopes if a key is not found locally.
-func WithBindingEffectHandler(ctx context.Context, bindingMap map[string]any) (context.Context, func()) {
-	bufferSize, err := GetFromBindingEffect[int](ctx, configkeys.ConfigEffectBindingHandlerBufferSize)
-	if err != nil {
-		bufferSize = 1
-	}
-
-	numWorkers, err := GetFromBindingEffect[int](ctx, configkeys.ConfigEffectBindingHandlerNumWorkers)
-	if err != nil {
-		numWorkers = 1
-	}
+func WithBindingEffectHandler(
+	ctx context.Context,
+	config effectmodel.EffectScopeConfig,
+	bindingMap map[string]any,
+) (context.Context, func()) {
 	if bindingMap == nil {
 		bindingMap = make(map[string]any)
 	}
@@ -53,7 +47,7 @@ func WithBindingEffectHandler(ctx context.Context, bindingMap map[string]any) (c
 	}
 	return WithResumablePartitionableEffectHandler(
 		ctx,
-		effectmodel.NewEffectScopeConfig(bufferSize, numWorkers),
+		config,
 		effectmodel.EffectBinding,
 		func(ctx context.Context, msg handlers.ResumableEffectMessage[BindingPayload, BindingResult]) {
 			msg.ResumeCh <- bindingHandler.handleFn(ctx, msg.Payload)

@@ -26,15 +26,14 @@ func WithResumablePartitionableEffectHandler[T effectmodel.Partitionable, R any]
 ) (context.Context, func()) {
 	td := normalizeTeardown(teardown)
 	handler := handlers.NewPartitionableResumableHandler(ctx, config, handleFn, td)
-
-	LogEffect(ctx, LogInfo, "created resumable effect handler", map[string]interface{}{
+	ctxWith := context.WithValue(ctx, enum, handler)
+	LogEffect(ctxWith, LogInfo, "created resumable effect handler", map[string]interface{}{
 		"effectId": handler.EffectId,
 		"enum":     enum,
 	})
-	ctxWith := context.WithValue(ctx, enum, handler)
 	return ctxWith, func() {
 		handler.Close()
-		LogEffect(ctx, LogInfo, "closed resumable effect handler", map[string]interface{}{
+		LogEffect(ctxWith, LogInfo, "closed resumable effect handler", map[string]interface{}{
 			"effectId": handler.EffectId,
 			"enum":     enum,
 		})
@@ -71,14 +70,14 @@ func WithFireAndForgetEffectHandler[T any](
 ) (context.Context, func()) {
 	td := normalizeTeardown(teardown)
 	handler := handlers.NewFireAndForgetHandler(ctx, config, handleFn, td)
-	LogEffect(ctx, LogInfo, "created fire/forget effect handler", map[string]interface{}{
+	ctxWith := context.WithValue(ctx, enum, handler)
+	LogEffect(ctxWith, LogInfo, "created fire/forget effect handler", map[string]interface{}{
 		"effectId": handler.EffectId,
 		"enum":     enum,
 	})
-	ctxWith := context.WithValue(ctx, enum, handler)
 	return ctxWith, func() {
 		handler.Close()
-		LogEffect(ctx, LogInfo, "closed fire/forget effect handler", map[string]interface{}{
+		LogEffect(ctxWith, LogInfo, "closed fire/forget effect handler", map[string]interface{}{
 			"effectId": handler.EffectId,
 			"enum":     enum,
 		})
@@ -115,14 +114,14 @@ func WithFireAndForgetPartitionableEffectHandler[T effectmodel.Partitionable](
 ) (context.Context, func()) {
 	td := normalizeTeardown(teardown)
 	handler := handlers.NewPartitionableFireAndForgetHandler(ctx, config, handleFn, td)
-	LogEffect(ctx, LogInfo, "created fire/forget effect handler", map[string]interface{}{
+	ctxWith := context.WithValue(ctx, enum, handler)
+	LogEffect(ctxWith, LogInfo, "created fire/forget effect handler", map[string]interface{}{
 		"effectId": handler.EffectId,
 		"enum":     enum,
 	})
-	ctxWith := context.WithValue(ctx, enum, handler)
 	return ctxWith, func() {
 		handler.Close()
-		LogEffect(ctx, LogInfo, "closed fire/forget effect handler", map[string]interface{}{
+		LogEffect(ctxWith, LogInfo, "closed fire/forget effect handler", map[string]interface{}{
 			"effectId": handler.EffectId,
 			"enum":     enum,
 		})

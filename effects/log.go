@@ -3,7 +3,6 @@ package effects
 import (
 	"context"
 
-	"github.com/on-the-ground/effect_ive_go/effects/configkeys"
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 	"go.uber.org/zap"
 )
@@ -36,18 +35,14 @@ type LogPayload struct {
 // WithZapLogEffectHandler registers a fire-and-forget log effect handler using zap.Logger.
 // It reads buffer size and worker count from the binding effect configuration.
 // The returned context includes the handler under the EffectLog enum.
-func WithZapLogEffectHandler(ctx context.Context, logger *zap.Logger) (context.Context, func()) {
-	bufferSize, err := GetFromBindingEffect[int](ctx, configkeys.ConfigEffectLogHandlerBufferSize)
-	if err != nil {
-		bufferSize = 1
-	}
-	numWorkers, err := GetFromBindingEffect[int](ctx, configkeys.ConfigEffectLogHandlerNumWorkers)
-	if err != nil {
-		numWorkers = 1
-	}
+func WithZapLogEffectHandler(
+	ctx context.Context,
+	config effectmodel.EffectScopeConfig,
+	logger *zap.Logger,
+) (context.Context, func()) {
 	return WithFireAndForgetEffectHandler(
 		ctx,
-		effectmodel.NewEffectScopeConfig(bufferSize, numWorkers),
+		config,
 		effectmodel.EffectLog,
 		func(ctx context.Context, payload LogPayload) {
 			fields := make([]zap.Field, 0, len(payload.Fields))

@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/on-the-ground/effect_ive_go/effects/configkeys"
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 )
 
@@ -72,11 +71,8 @@ func waitChildren(ctx context.Context, wg *sync.WaitGroup, childrenCancels []con
 // - Worker count is fixed to 1 (non-partitioned).
 func WithConcurrencyEffectHandler(
 	ctx context.Context,
+	bufferSize int,
 ) (context.Context, func()) {
-	bufferSize, err := GetFromBindingEffect[int](ctx, configkeys.ConfigEffectConcurrencyHandlerBufferSize)
-	if err != nil {
-		bufferSize = 1
-	}
 	const numWorkers = 1 // number of workers is not configurable for concurrency effect
 
 	wg := &sync.WaitGroup{}

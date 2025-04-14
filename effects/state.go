@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/on-the-ground/effect_ive_go/effects/configkeys"
 	"github.com/on-the-ground/effect_ive_go/effects/internal/handlers"
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 )
@@ -59,16 +58,11 @@ type StateResult struct {
 
 // WithStateEffectHandler registers a resumable, partitionable effect handler for managing key-value state.
 // It stores the internal state in a memory-safe sync.Map and supports sharded processing.
-func WithStateEffectHandler(ctx context.Context, initMap map[string]any) (context.Context, func()) {
-	bufferSize, err := GetFromBindingEffect[int](ctx, configkeys.ConfigEffectStateHandlerBufferSize)
-	if err != nil {
-		bufferSize = 1
-	}
-	numWorkers, err := GetFromBindingEffect[int](ctx, configkeys.ConfigEffectStateHandlerNumWorkers)
-	if err != nil {
-		numWorkers = 1
-	}
-
+func WithStateEffectHandler(
+	ctx context.Context,
+	config effectmodel.EffectScopeConfig,
+	initMap map[string]any,
+) (context.Context, func()) {
 	stateHandler := &stateHandler{
 		stateMap: &sync.Map{},
 	}
@@ -77,7 +71,7 @@ func WithStateEffectHandler(ctx context.Context, initMap map[string]any) (contex
 	}
 	return WithResumablePartitionableEffectHandler(
 		ctx,
-		effectmodel.NewEffectScopeConfig(bufferSize, numWorkers),
+		config,
 		effectmodel.EffectState,
 		func(ctx context.Context, msg handlers.ResumableEffectMessage[statePayload, StateResult]) {
 			msg.ResumeCh <- stateHandler.handleFn(ctx, msg.Payload)
