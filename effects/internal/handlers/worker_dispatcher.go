@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"sync"
 
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 )
@@ -28,8 +29,11 @@ func NewSingleQueue[T any](
 	handleFn func(context.Context, T),
 ) WorkerDispatcher[T] {
 	effCh := make(chan T, bufferSize)
+	ready := make(chan struct{})
+
 	go func(ch chan T) {
 		defer close(ch)
+		close(ready)
 		for {
 			select {
 			case msg := <-ch:
@@ -39,6 +43,9 @@ func NewSingleQueue[T any](
 			}
 		}
 	}(effCh)
+
+	<-ready
+
 	return singleQueue[T]{effectCh: effCh}
 }
 
@@ -59,10 +66,13 @@ func NewPartitionedQueue[T effectmodel.Partitionable](
 	handleFn func(context.Context, T),
 ) WorkerDispatcher[T] {
 	channels := make([]chan T, numWorkers)
+	ready := sync.WaitGroup{}
 	for i := 0; i < numWorkers; i++ {
+		ready.Add(1)
 		ch := make(chan T, bufferSize)
 		go func(ch chan T) {
 			defer close(ch)
+			ready.Done()
 			for {
 				select {
 				case msg := <-ch:
@@ -74,5 +84,6 @@ func NewPartitionedQueue[T effectmodel.Partitionable](
 		}(ch)
 		channels[i] = ch
 	}
+	ready.Wait()
 	return partitionedQueue[T]{effectChs: channels}
 }

@@ -14,12 +14,14 @@ func NewFireAndForgetHandler[T any](
 	teardown func(),
 ) FireAndForgetHandler[T] {
 	ctx, cancelFn := context.WithCancel(ctx)
-	queue := NewSingleQueue(ctx, config.BufferSize, handleFn)
 	return FireAndForgetHandler[T]{
-		effectScope: newEffectScope(ctx, queue, func() {
-			cancelFn()
-			teardown()
-		}),
+		effectScope: newEffectScope(
+			NewSingleQueue(ctx, config.BufferSize, handleFn),
+			func() {
+				cancelFn()
+				teardown()
+			},
+		),
 	}
 }
 
@@ -30,12 +32,14 @@ func NewPartitionableFireAndForgetHandler[T effectmodel.Partitionable](
 	teardown func(),
 ) FireAndForgetHandler[T] {
 	ctx, cancelFn := context.WithCancel(ctx)
-	queue := NewPartitionedQueue(ctx, config.NumWorkers, config.BufferSize, handleFn)
 	return FireAndForgetHandler[T]{
-		effectScope: newEffectScope(ctx, queue, func() {
-			cancelFn()
-			teardown()
-		}),
+		effectScope: newEffectScope(
+			NewPartitionedQueue(ctx, config.NumWorkers, config.BufferSize, handleFn),
+			func() {
+				cancelFn()
+				teardown()
+			},
+		),
 	}
 }
 
@@ -58,6 +62,6 @@ func (ffh FireAndForgetHandler[T]) FireAndForgetEffect(ctx context.Context, payl
 
 	select {
 	case <-ctx.Done():
-	case ffh.queue.GetChannelOf(payload) <- payload:
+	case ffh.dispatcher.GetChannelOf(payload) <- payload:
 	}
 }

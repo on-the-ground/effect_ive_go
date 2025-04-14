@@ -13,6 +13,7 @@ import (
 // - Adds the goroutine to the WaitGroup for tracking.
 // - Catches and logs panics individually.
 func spawnConcurrentChildren(wg *sync.WaitGroup, childrenCancels *[]context.CancelFunc, functions []func(context.Context)) {
+	ready := sync.WaitGroup{}
 	numRoutines := len(functions)
 	*childrenCancels = make([]context.CancelFunc, numRoutines)
 
@@ -20,6 +21,7 @@ func spawnConcurrentChildren(wg *sync.WaitGroup, childrenCancels *[]context.Canc
 		childCtx, cancel := context.WithCancel(context.Background())
 		(*childrenCancels)[idx] = cancel
 		wg.Add(1)
+		ready.Add(1)
 		go func(f func(context.Context), ctx context.Context) {
 			defer wg.Done()
 			defer func() {
@@ -30,20 +32,25 @@ func spawnConcurrentChildren(wg *sync.WaitGroup, childrenCancels *[]context.Canc
 					})
 				}
 			}()
+			ready.Done()
 			f(ctx)
 		}(fn, childCtx)
 	}
+	ready.Wait()
 }
 
 // waitChildren blocks until all child goroutines complete or the context is cancelled.
 // - If cancelled, invokes all child cancel functions to propagate cancellation.
 func waitChildren(ctx context.Context, wg *sync.WaitGroup, childrenCancels []context.CancelFunc) {
 	waitCh := make(chan struct{})
+	ready := make(chan struct{})
 	go func() {
+		ready <- struct{}{}
 		LogEffect(ctx, LogInfo, "waiting for all routines to finish", nil)
 		wg.Wait()
 		close(waitCh)
 	}()
+	<-ready
 
 	select {
 	case <-waitCh:

@@ -13,9 +13,11 @@ func NewResumableEffectHandler[P any, R any](
 	handleFn func(context.Context, ResumableEffectMessage[P, R]),
 	teardown func(),
 ) ResumableHandler[P, R] {
-	queue := NewSingleQueue(ctx, config.BufferSize, handleFn)
 	return ResumableHandler[P, R]{
-		effectScope: newEffectScope[ResumableEffectMessage[P, R]](ctx, queue, teardown),
+		effectScope: newEffectScope(
+			NewSingleQueue(ctx, config.BufferSize, handleFn),
+			teardown,
+		),
 	}
 }
 
@@ -26,12 +28,14 @@ func NewPartitionableResumableHandler[P effectmodel.Partitionable, R any](
 	teardown func(),
 ) ResumableHandler[P, R] {
 	ctx, cancelFn := context.WithCancel(ctx)
-	queue := NewPartitionedQueue(ctx, config.NumWorkers, config.BufferSize, handleFn)
 	return ResumableHandler[P, R]{
-		effectScope: newEffectScope(ctx, queue, func() {
-			cancelFn()
-			teardown()
-		}),
+		effectScope: newEffectScope(
+			NewPartitionedQueue(ctx, config.NumWorkers, config.BufferSize, handleFn),
+			func() {
+				cancelFn()
+				teardown()
+			},
+		),
 	}
 }
 
@@ -61,7 +65,7 @@ func (rh ResumableHandler[P, R]) PerformEffect(ctx context.Context, payload P) (
 	}
 	select {
 	case <-ctx.Done():
-	case rh.queue.GetChannelOf(msg) <- msg:
+	case rh.dispatcher.GetChannelOf(msg) <- msg:
 	}
 
 	select {

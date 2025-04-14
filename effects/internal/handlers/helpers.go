@@ -6,8 +6,8 @@ import (
 	"github.com/cespare/xxhash/v2"
 )
 
-func hash(key string) int {
-	return int(xxhash.Sum64String(key))
+func hash(key string) uint64 {
+	return xxhash.Sum64String(key)
 }
 
 func getIndexByHash(payload effectmodel.Partitionable, numChs int) int {
@@ -17,6 +17,6 @@ func getIndexByHash(payload effectmodel.Partitionable, numChs int) int {
 	case 1:
 		return 0
 	default:
-		return hash(payload.PartitionKey()) % numChs
+		return int(hash(payload.PartitionKey()) % uint64(numChs))
 	}
 }

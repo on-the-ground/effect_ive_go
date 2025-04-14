@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"log"
 
 	"github.com/google/uuid"
@@ -24,10 +23,10 @@ import (
 // This is a **conscious design choice** to reinforce proper scoping and ownership.
 // If you require shared access, explicitly manage synchronization outside this scope.
 type effectScope[T any] struct {
-	EffectId string
-	queue    WorkerDispatcher[T]
-	closeFn  func()
-	closed   bool
+	EffectId   string
+	dispatcher WorkerDispatcher[T]
+	closeFn    func()
+	closed     bool
 }
 
 func (es *effectScope[T]) Close() {
@@ -39,14 +38,13 @@ func (es *effectScope[T]) Close() {
 }
 
 func newEffectScope[T any](
-	ctx context.Context,
-	queue WorkerDispatcher[T],
+	dispatcher WorkerDispatcher[T],
 	teardown func(),
 ) *effectScope[T] {
 	return &effectScope[T]{
-		EffectId: uuid.New().String(),
-		queue:    queue,
-		closeFn:  teardown,
-		closed:   false,
+		EffectId:   uuid.New().String(),
+		dispatcher: dispatcher,
+		closeFn:    teardown,
+		closed:     false,
 	}
 }
