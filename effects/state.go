@@ -79,6 +79,21 @@ func WithStateEffectHandler(
 	)
 }
 
+// delegateStateEffect is an internal helper for performing the state effect directly.
+func delegateStateEffect(ctx context.Context, payload statePayload) (res StateResult) {
+	defer func() {
+		if r := recover(); r != nil {
+			// Handle panic and return a nil value with an error
+			// indicating that the effect handler is not available to delegate.
+			res = StateResult{
+				value: nil,
+				err:   fmt.Errorf("key not found: %v", r),
+			}
+		}
+	}()
+	return stateEffect(ctx, payload)
+}
+
 func stateEffect(ctx context.Context, payload statePayload) StateResult {
 	return PerformResumableEffect[statePayload, StateResult](ctx, effectmodel.EffectState, payload)
 }
@@ -109,11 +124,7 @@ func (sH stateHandler) handleFn(ctx context.Context, payload statePayload) State
 		if ok {
 			return StateResult{value: v, err: nil}
 		}
-		_, err := hasHandler(ctx, effectmodel.EffectState)
-		if err != nil {
-			return stateEffect(ctx, payload)
-		}
-		return StateResult{value: nil, err: fmt.Errorf("key not found: %s", payload.Key)}
+		return delegateStateEffect(ctx, payload)
 	default:
 		// This should never happen because we are using a sealed interface to prevent adding new types.
 		// But we still need to handle it to satisfy the compiler.

@@ -55,6 +55,21 @@ func WithBindingEffectHandler(
 	)
 }
 
+// delegateBindingEffect is an internal helper for performing the binding effect directly.
+func delegateBindingEffect(ctx context.Context, payload BindingPayload) (res BindingResult) {
+	defer func() {
+		if r := recover(); r != nil {
+			// Handle panic and return a nil value with an error
+			// indicating that the effect handler is not available to delegate.
+			res = BindingResult{
+				value: nil,
+				err:   fmt.Errorf("key not found: %v", r),
+			}
+		}
+	}()
+	return bindingEffect(ctx, payload)
+}
+
 // bindingEffect is an internal helper for performing the binding effect directly.
 func bindingEffect(ctx context.Context, payload BindingPayload) BindingResult {
 	return PerformResumableEffect[BindingPayload, BindingResult](ctx, effectmodel.EffectBinding, payload)
@@ -82,9 +97,5 @@ func (bh bindingHandler) handleFn(ctx context.Context, payload BindingPayload) B
 	if ok {
 		return BindingResult{value: v, err: nil}
 	}
-	_, err := hasHandler(ctx, effectmodel.EffectBinding)
-	if err != nil {
-		return bindingEffect(ctx, payload)
-	}
-	return BindingResult{value: nil, err: fmt.Errorf("key not found: %s", payload.Key)}
+	return delegateBindingEffect(ctx, payload)
 }
