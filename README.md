@@ -242,6 +242,66 @@ That’s why careful code review and testing is essential when using dynamic eff
 
 → Guide for users to define their own effect handlers→ How to apply scope and implement custom logic
 
+
+## ✍️ Custom Effect Design Tips
+
+While building your own custom effects, especially `ResumableEffect`, keep the following principle in mind:
+
+> ⚠️ **Avoid invoking resumable effects _inside_ other effect handlers.**
+
+### Why?
+
+Resumable effects involve not just side-effect execution but also **waiting for a response**. If a handler itself triggers another resumable effect, you introduce:
+
+- ❗ **Coupling between effects**
+    
+- ❗ **Non-determinism** in handler behavior
+    
+- ❗ **Hidden control flow delegation**, which breaks testability and predictability
+    
+
+### 🔄 Analogy
+
+This is similar to avoiding "nested monads" in functional programming. Instead of:
+
+```go
+// ❌ Don't do this inside an effect handler 
+msg.ResumeCh <- PerformResumableEffect(ctx, EffectConfig, payload)
+```
+
+Do this instead:
+
+```go
+// ✅ Do it outside and pass as explicit input 
+configValue := PerformResumableEffect(ctx, EffectConfig, payload)  PerformResumableEffect(ctx, MyEffect, configValue)
+```
+
+### 🧘‍♂️ Principle
+
+> Keep your effects **flat**.  
+> Handlers should **not rely on other handlers** to work correctly.
+
+Let the **caller** take control of effect composition:
+
+- Scope the config effect handler first
+    
+- Query the value
+    
+- Then pass it to the other effect handler as an input
+    
+
+### 💡 Exception?
+
+**Fire-and-Forget** effects (e.g., logging) are safe to call inside other handlers.
+
+```go
+// ✅ This is fine inside any handler 
+LogEffect(ctx, LogInfo, "processing payload", map[string]any{"key": payload.Key})
+```
+
+Because they **do not block** and **do not depend on return values**, they’re harmless and often useful for internal visibility.
+
+
 * * *
 
 # Built-in Effects
