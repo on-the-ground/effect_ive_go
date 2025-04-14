@@ -43,7 +43,7 @@ type ResumableHandler[P any, R any] struct {
 	*effectScope[ResumableEffectMessage[P, R]]
 }
 
-func (rh ResumableHandler[P, R]) PerformEffect(ctx context.Context, payload P) (ret R) {
+func (rh ResumableHandler[P, R]) PerformEffect(ctx context.Context, payload P) R {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf(
@@ -69,10 +69,11 @@ func (rh ResumableHandler[P, R]) PerformEffect(ctx context.Context, payload P) (
 	}
 
 	select {
-	case ret = <-resumeCh:
+	case ret := <-resumeCh:
+		return ret
 	case <-ctx.Done():
 	}
-	return
+	return *new(R)
 }
 
 var _ effectmodel.Partitionable = ResumableEffectMessage[any, any]{}

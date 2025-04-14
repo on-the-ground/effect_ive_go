@@ -94,8 +94,8 @@ type bindingHandler struct {
 // - Otherwise: returns a key-not-found error.
 func (bh bindingHandler) handleFn(ctx context.Context, payload BindingPayload) BindingResult {
 	v, ok := bh.bindingMap[payload.Key]
-	if ok {
-		return BindingResult{value: v, err: nil}
+	if !ok {
+		return delegateBindingEffect(ctx, payload)
 	}
-	return delegateBindingEffect(ctx, payload)
+	return BindingResult{value: v, err: nil}
 }

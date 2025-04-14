@@ -121,10 +121,10 @@ func (sH stateHandler) handleFn(ctx context.Context, payload statePayload) State
 		return StateResult{value: nil, err: nil}
 	case GetStatePayload:
 		v, ok := sH.stateMap.Load(payload.Key)
-		if ok {
-			return StateResult{value: v, err: nil}
+		if !ok {
+			return delegateStateEffect(ctx, payload)
 		}
-		return delegateStateEffect(ctx, payload)
+		return StateResult{value: v, err: nil}
 	default:
 		// This should never happen because we are using a sealed interface to prevent adding new types.
 		// But we still need to handle it to satisfy the compiler.
