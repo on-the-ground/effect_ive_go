@@ -79,12 +79,13 @@ This is what **Effect-ive Go** makes possible.
 
 An effect arises when a function violates one or more of the following 4W guarantees. Each type of violation leads to a specific class of side effect.
 
-| 4W Criteria                                                                            | Effect Type                      | Description                                                                | Examples                                                                                              |
-| -------------------------------------------------------------------------------------- | -------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| **Who**: Control Flow Ownership<br/>“Is someone else executing this?”                  | **Concurrency Effect**           | Delegates execution responsibility to another green thread or runtime unit | `go func() { ... }`<br/>`spawn(fn)`<br/>`fireAndForget(effect)`                                       |
-| **When**: Execution Timing Guarantee<br/>“Is execution guaranteed immediately?”        | **Scheduling Effect** | Introduces delay or reordering between request and execution               | `setTimeout(fn)`<br/>`enqueueJob()`<br/>`defer()`<br/>`scheduleNextTick()`                            |
-| **Where**: Context Awareness<br/>“Which context is this running in?”                   | **Binding / State Effect**            | Behavior or result depends on the current execution context                | `context.WithValue()`<br/>`request.Context()`<br/>`ThreadLocal`<br/>`zone.js`<br/>`this` (JavaScript) |
-| **What**: Predictable Result<br/>“Does the same input always produce the same output?” | **Rand / IO / Time Effect**              | Depends on internal/external state or mutates state as a side effect       | `rand.Intn(n)`<br/>`time.Now()`<br/>`globalCounter++`<br/>`db.Save()`                                 |
+
+|4W Criteria|Effect Type|Description|Examples|
+|---|---|---|---|
+|**Who**: Control Flow Ownership“Is someone else executing this?”|**Concurrency Effect**|Delegates execution to another unit of control flow (thread, goroutine, etc.)|`go func() { ... }`|
+|**When**: Execution Timing Guarantee“Is execution guaranteed immediately?”|**Task Effect**|Execution may happen **later**, depending on the runtime or external trigger|`http.Get(...)`|
+|**Where**: Context Awareness“Which context is this running in?”|**Binding / State Effect**|Behavior depends on the current scoped context or environment|context.WithValue()</br>request.Context()</br>ThreadLocal</br>this(JavaScript)|
+|**What**: Predictable Result“Does the same input always produce the same output?”|**Time / Random / IO Effect**|Depends on or mutates internal/external state|rand.Intn(n)</br>time.Now()</br>globalCounter++</br>db.Save()|
 
 
 * * *
