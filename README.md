@@ -73,12 +73,19 @@ This is what **Effect-ive Go** makes possible.
 * Everything that is **not a pure function**
 * A helpful guide: the **4W Checklist** — if you violate even one, it’s a side effect:
 
-| W   | Question |
-| --- | --- |
-| **Who** | Can someone else trigger this logic? |
-| **What** | Does it mutate external state or return non-deterministic output? |
-| **When** | Is it executed immediately upon call, or deferred? |
-| **Where** | Does the behavior depend on where or under which context it's called? |
+### 🧭 Categorizing Effects by the 4W Criteria
+
+> ✅ An effect is anything that violates **Who**, **When**, **Where**, or **What**.
+
+An effect arises when a function violates one or more of the following 4W guarantees. Each type of violation leads to a specific class of side effect.
+
+| 4W Criteria                                                                            | Effect Type                      | Description                                                                | Examples                                                                                              |
+| -------------------------------------------------------------------------------------- | -------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| **Who**: Control Flow Ownership<br/>“Is someone else executing this?”                  | **Concurrency Effect**           | Delegates execution responsibility to another green thread or runtime unit | `go func() { ... }`<br/>`spawn(fn)`<br/>`fireAndForget(effect)`                                       |
+| **When**: Execution Timing Guarantee<br/>“Is execution guaranteed immediately?”        | **Scheduling Effect** | Introduces delay or reordering between request and execution               | `setTimeout(fn)`<br/>`enqueueJob()`<br/>`defer()`<br/>`scheduleNextTick()`                            |
+| **Where**: Context Awareness<br/>“Which context is this running in?”                   | **Binding / State Effect**            | Behavior or result depends on the current execution context                | `context.WithValue()`<br/>`request.Context()`<br/>`ThreadLocal`<br/>`zone.js`<br/>`this` (JavaScript) |
+| **What**: Predictable Result<br/>“Does the same input always produce the same output?” | **Rand / IO / Time Effect**              | Depends on internal/external state or mutates state as a side effect       | `rand.Intn(n)`<br/>`time.Now()`<br/>`globalCounter++`<br/>`db.Save()`                                 |
+
 
 * * *
 
