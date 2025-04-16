@@ -10,12 +10,19 @@ import (
 func NewResumableEffectHandler[P any, R any](
 	ctx context.Context,
 	config effectmodel.EffectScopeConfig,
-	handleFn func(context.Context, ResumableEffectMessage[P, R]),
+	handleFn func(context.Context, P) (R, error),
 	teardown func(),
 ) ResumableHandler[P, R] {
 	return ResumableHandler[P, R]{
 		effectScope: newEffectScope(
-			NewSingleQueue(ctx, config.BufferSize, handleFn),
+			NewSingleQueue(
+				ctx,
+				config.BufferSize,
+				func(ctx context.Context, msg ResumableEffectMessage[P, R]) {
+					msg.ResumeCh <- resumableResultFrom(handleFn(ctx, msg.Payload))
+					close(msg.ResumeCh)
+				},
+			),
 			teardown,
 		),
 	}
@@ -24,13 +31,21 @@ func NewResumableEffectHandler[P any, R any](
 func NewPartitionableResumableHandler[P effectmodel.Partitionable, R any](
 	ctx context.Context,
 	config effectmodel.EffectScopeConfig,
-	handleFn func(context.Context, ResumableEffectMessage[P, R]),
+	handleFn func(context.Context, P) (R, error),
 	teardown func(),
 ) ResumableHandler[P, R] {
 	ctx, cancelFn := context.WithCancel(ctx)
 	return ResumableHandler[P, R]{
 		effectScope: newEffectScope(
-			NewPartitionedQueue(ctx, config.NumWorkers, config.BufferSize, handleFn),
+			NewPartitionedQueue(
+				ctx,
+				config.NumWorkers,
+				config.BufferSize,
+				func(ctx context.Context, msg ResumableEffectMessage[P, R]) {
+					msg.ResumeCh <- resumableResultFrom(handleFn(ctx, msg.Payload))
+					close(msg.ResumeCh)
+				},
+			),
 			func() {
 				cancelFn()
 				teardown()
@@ -43,7 +58,7 @@ type ResumableHandler[P any, R any] struct {
 	*effectScope[ResumableEffectMessage[P, R]]
 }
 
-func (rh ResumableHandler[P, R]) PerformEffect(ctx context.Context, payload P) R {
+func (rh ResumableHandler[P, R]) PerformEffect(ctx context.Context, payload P) chan ResumableResult[R] {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf(
@@ -57,7 +72,7 @@ func (rh ResumableHandler[P, R]) PerformEffect(ctx context.Context, payload P) R
 	}()
 
 	// buffered to prevent blocking if handler sends without waiting
-	resumeCh := make(chan R, 1)
+	resumeCh := make(chan ResumableResult[R], 1)
 
 	msg := ResumableEffectMessage[P, R]{
 		Payload:  payload,
@@ -68,19 +83,24 @@ func (rh ResumableHandler[P, R]) PerformEffect(ctx context.Context, payload P) R
 	case rh.dispatcher.GetChannelOf(msg) <- msg:
 	}
 
-	select {
-	case ret := <-resumeCh:
-		return ret
-	case <-ctx.Done():
-	}
-	return *new(R)
+	return resumeCh
+}
+
+// ResumableResult represents the result of handled effects.
+type ResumableResult[T any] struct {
+	Value T
+	Err   error
+}
+
+func resumableResultFrom[R any](res R, err error) ResumableResult[R] {
+	return ResumableResult[R]{Value: res, Err: err}
 }
 
 var _ effectmodel.Partitionable = ResumableEffectMessage[any, any]{}
 
 type ResumableEffectMessage[P any, R any] struct {
 	Payload  P
-	ResumeCh chan R
+	ResumeCh chan ResumableResult[R]
 }
 
 func (rem ResumableEffectMessage[P, R]) PartitionKey() string {

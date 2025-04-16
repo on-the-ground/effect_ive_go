@@ -11,7 +11,7 @@ import (
 
 func WithTestLogEffectHandler(
 	ctx context.Context,
-) (context.Context, func()) {
+) (context.Context, func() context.Context) {
 	core, _ := observer.New(zap.DebugLevel)
 	return effects.WithZapLogEffectHandler(
 		ctx,

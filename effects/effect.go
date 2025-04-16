@@ -21,9 +21,9 @@ func WithResumablePartitionableEffectHandler[T effectmodel.Partitionable, R any]
 	ctx context.Context,
 	config effectmodel.EffectScopeConfig,
 	enum effectmodel.EffectEnum,
-	handleFn func(context.Context, handlers.ResumableEffectMessage[T, R]),
+	handleFn func(context.Context, T) (R, error),
 	teardown ...func(),
-) (context.Context, func()) {
+) (context.Context, func() context.Context) {
 	td := normalizeTeardown(teardown)
 	handler := handlers.NewPartitionableResumableHandler(ctx, config, handleFn, td)
 	ctxWith := context.WithValue(ctx, enum, handler)
@@ -31,12 +31,13 @@ func WithResumablePartitionableEffectHandler[T effectmodel.Partitionable, R any]
 		"effectId": handler.EffectId,
 		"enum":     enum,
 	})
-	return ctxWith, func() {
+	return ctxWith, func() context.Context {
 		handler.Close()
 		LogEffect(ctxWith, LogDebug, "closed resumable effect handler", map[string]interface{}{
 			"effectId": handler.EffectId,
 			"enum":     enum,
 		})
+		return ctx
 	}
 }
 
@@ -48,7 +49,7 @@ func PerformResumableEffect[T effectmodel.Partitionable, R any](
 	ctx context.Context,
 	enum effectmodel.EffectEnum,
 	payload T,
-) R {
+) <-chan handlers.ResumableResult[R] {
 	handler := mustGetTypedValue[handlers.ResumableHandler[T, R]](
 		func() (any, error) {
 			return hasHandler(ctx, enum)
@@ -67,7 +68,7 @@ func WithFireAndForgetEffectHandler[T any](
 	enum effectmodel.EffectEnum,
 	handleFn func(context.Context, T),
 	teardown ...func(),
-) (context.Context, func()) {
+) (context.Context, func() context.Context) {
 	td := normalizeTeardown(teardown)
 	handler := handlers.NewFireAndForgetHandler(ctx, config, handleFn, td)
 	ctxWith := context.WithValue(ctx, enum, handler)
@@ -75,12 +76,13 @@ func WithFireAndForgetEffectHandler[T any](
 		"effectId": handler.EffectId,
 		"enum":     enum,
 	})
-	return ctxWith, func() {
+	return ctxWith, func() context.Context {
 		handler.Close()
 		LogEffect(ctxWith, LogDebug, "closed fire/forget effect handler", map[string]interface{}{
 			"effectId": handler.EffectId,
 			"enum":     enum,
 		})
+		return ctx
 	}
 }
 
@@ -111,7 +113,7 @@ func WithFireAndForgetPartitionableEffectHandler[T effectmodel.Partitionable](
 	enum effectmodel.EffectEnum,
 	handleFn func(context.Context, T),
 	teardown ...func(),
-) (context.Context, func()) {
+) (context.Context, func() context.Context) {
 	td := normalizeTeardown(teardown)
 	handler := handlers.NewPartitionableFireAndForgetHandler(ctx, config, handleFn, td)
 	ctxWith := context.WithValue(ctx, enum, handler)
@@ -119,12 +121,13 @@ func WithFireAndForgetPartitionableEffectHandler[T effectmodel.Partitionable](
 		"effectId": handler.EffectId,
 		"enum":     enum,
 	})
-	return ctxWith, func() {
+	return ctxWith, func() context.Context {
 		handler.Close()
 		LogEffect(ctxWith, LogDebug, "closed fire/forget effect handler", map[string]interface{}{
 			"effectId": handler.EffectId,
 			"enum":     enum,
 		})
+		return ctx
 	}
 }
 
