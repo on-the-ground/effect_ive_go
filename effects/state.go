@@ -51,6 +51,13 @@ type statePayload interface {
 
 // WithStateEffectHandler registers a resumable, partitionable effect handler for managing key-value state.
 // It stores the internal state in a memory-safe sync.Map and supports sharded processing.
+// The handler is resumable and partitionable, meaning it can be resumed after a failure
+// and can handle multiple partitions concurrently.
+// The handler is registered in the context and can be used to perform state operations.
+// The handler is closed when the context is canceled or when the teardown function is called.
+// The teardown function should be called when the effect handler is no longer needed.
+// If the teardown function is called early, the effect handler will be closed.
+// The context returned by the teardown function should be used for further operations.
 func WithStateEffectHandler(
 	ctx context.Context,
 	config effectmodel.EffectScopeConfig,

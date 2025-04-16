@@ -58,7 +58,7 @@ type ResumableHandler[P any, R any] struct {
 	*effectScope[ResumableEffectMessage[P, R]]
 }
 
-func (rh ResumableHandler[P, R]) PerformEffect(ctx context.Context, payload P) chan ResumableResult[R] {
+func (rh ResumableHandler[P, R]) PerformEffect(ctx context.Context, payload P) <-chan ResumableResult[R] {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf(

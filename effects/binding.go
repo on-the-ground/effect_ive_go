@@ -21,10 +21,15 @@ func (bp BindingPayload) PartitionKey() string {
 
 // WithBindingEffectHandler registers a resumable, partitionable effect handler for bindings.
 //
-// - Reads buffer/worker config via BindingEffect itself (bootstrapped).
-// - If no config is found, defaults are used (bufferSize = 1, numWorkers = 1).
-// - Accepts a key-value map used for lookups.
-// - Allows fallback to upper scopes if a key is not found locally.
+//   - Reads buffer/worker config via BindingEffect itself (bootstrapped).
+//   - If no config is found, defaults are used (bufferSize = 1, numWorkers = 1).
+//   - Accepts a key-value map used for lookups.
+//   - Allows fallback to upper scopes if a key is not found locally.
+//   - Returns a context with the effect handler registered.
+//   - Returns a teardown function to close the handler.
+//   - The teardown function should be called when the effect handler is no longer needed.
+//   - If the teardown function is called early, the effect handler will be closed,
+//     you should use the context returned by the teardown function.
 func WithBindingEffectHandler(
 	ctx context.Context,
 	config effectmodel.EffectScopeConfig,
