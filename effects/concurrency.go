@@ -72,9 +72,14 @@ func waitChildren(ctx context.Context, wg *sync.WaitGroup) {
 //
 // It allows `ConcurrencyEffect(ctx, [...])` to spawn multiple goroutines under managed scope.
 //
-// - Buffer size is configurable via binding effect.
-// - WaitGroup + cancellation tracking ensures children are joined on shutdown.
-// - Worker count is fixed to 1 (non-partitioned).
+//   - Buffer size is configurable via binding effect.
+//   - WaitGroup + cancellation tracking ensures children are joined on shutdown.
+//   - Worker count is fixed to 1 (non-partitioned).
+//   - Returns a function to end the concurrency effect handler.
+//   - The returned function should be called when the effect handler is no longer needed.
+//   - If the returned function is called early, the effect handler will be closed,
+//     and you should use the context returned by the teardown function.
+//   - The returned context is the same as the input context.
 func WithConcurrencyEffectHandler(
 	ctx context.Context,
 	bufferSize int,
