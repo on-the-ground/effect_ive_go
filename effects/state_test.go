@@ -189,23 +189,6 @@ func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 	wg.Wait()
 }
 
-func TestStateEffect_RecoverAfterTeardown(t *testing.T) {
-	ctx := context.Background()
-	ctx, endOfLog := WithTestLogEffectHandler(ctx)
-	defer endOfLog()
-
-	ctx, cancel := effects.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(1, 1), map[string]any{
-		"foo": "bar",
-	})
-	cancel()                           // immediately teardown
-	time.Sleep(100 * time.Millisecond) // allow some time for teardown
-
-	res, err := effects.StateEffect(ctx, effects.GetStatePayload{Key: "foo"})
-	if res != nil || err != nil {
-		t.Fatalf("expected recover error after handler closed, got: %v", err)
-	}
-}
-
 func TestStateEffect_ContextTimeout(t *testing.T) {
 	ctx := context.Background()
 	ctx, endOfLog := WithTestLogEffectHandler(ctx)

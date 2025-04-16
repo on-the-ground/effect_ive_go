@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/on-the-ground/effect_ive_go/effects/internal/handlers"
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 )
 
@@ -50,19 +49,13 @@ type statePayload interface {
 	sealedInterfaceStatePayload()
 }
 
-// StateResult represents the result of a state operation.
-type StateResult struct {
-	value any
-	err   error
-}
-
 // WithStateEffectHandler registers a resumable, partitionable effect handler for managing key-value state.
 // It stores the internal state in a memory-safe sync.Map and supports sharded processing.
 func WithStateEffectHandler(
 	ctx context.Context,
 	config effectmodel.EffectScopeConfig,
 	initMap map[string]any,
-) (context.Context, func()) {
+) (context.Context, func() context.Context) {
 	stateHandler := &stateHandler{
 		stateMap: &sync.Map{},
 	}
@@ -73,35 +66,35 @@ func WithStateEffectHandler(
 		ctx,
 		config,
 		effectmodel.EffectState,
-		func(ctx context.Context, msg handlers.ResumableEffectMessage[statePayload, StateResult]) {
-			msg.ResumeCh <- stateHandler.handleFn(ctx, msg.Payload)
-		},
+		stateHandler.handle,
 	)
 }
 
+// StateEffect performs a state operation (get, set, delete) using the EffectState handler.
+func StateEffect(ctx context.Context, payload statePayload) (val any, err error) {
+	resultCh := PerformResumableEffect[statePayload, any](ctx, effectmodel.EffectState, payload)
+	select {
+	case res := <-resultCh:
+		val = res.Value
+		err = res.Err
+	case <-ctx.Done():
+	}
+	return
+}
+
 // delegateStateEffect is an internal helper for performing the state effect directly.
-func delegateStateEffect(ctx context.Context, payload statePayload) (res StateResult) {
+func delegateStateEffect(upperCtx context.Context, payload statePayload) (res any, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			// Handle panic and return a nil value with an error
 			// indicating that the effect handler is not available to delegate.
-			res = StateResult{
-				value: nil,
-				err:   fmt.Errorf("key not found: %v", r),
-			}
+			res = nil
+			err = fmt.Errorf("key not found: %v", r)
 		}
 	}()
-	return stateEffect(ctx, payload)
-}
 
-func stateEffect(ctx context.Context, payload statePayload) StateResult {
-	return PerformResumableEffect[statePayload, StateResult](ctx, effectmodel.EffectState, payload)
-}
-
-// StateEffect performs a state operation (get, set, delete) using the EffectState handler.
-func StateEffect(ctx context.Context, payload statePayload) (any, error) {
-	res := stateEffect(ctx, payload)
-	return res.value, res.err
+	// Delegate the effect to the upper handler
+	return StateEffect(upperCtx, payload)
 }
 
 // stateHandler defines the in-memory state store logic.
@@ -110,21 +103,21 @@ type stateHandler struct {
 	stateMap *sync.Map
 }
 
-// handleFn routes the given payload to the appropriate state operation logic.
-func (sH stateHandler) handleFn(ctx context.Context, payload statePayload) StateResult {
+// handle routes the given payload to the appropriate state operation logic.
+func (sH stateHandler) handle(ctx context.Context, payload statePayload) (any, error) {
 	switch payload := payload.(type) {
 	case SetStatePayload:
 		sH.stateMap.Store(payload.Key, payload.Value)
-		return StateResult{value: nil, err: nil}
+		return nil, nil
 	case DeleteStatePayload:
 		sH.stateMap.Delete(payload.Key)
-		return StateResult{value: nil, err: nil}
+		return nil, nil
 	case GetStatePayload:
 		v, ok := sH.stateMap.Load(payload.Key)
 		if !ok {
 			return delegateStateEffect(ctx, payload)
 		}
-		return StateResult{value: v, err: nil}
+		return v, nil
 	default:
 		// This should never happen because we are using a sealed interface to prevent adding new types.
 		// But we still need to handle it to satisfy the compiler.

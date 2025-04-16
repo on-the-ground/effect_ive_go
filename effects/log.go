@@ -39,7 +39,7 @@ func WithZapLogEffectHandler(
 	ctx context.Context,
 	config effectmodel.EffectScopeConfig,
 	logger *zap.Logger,
-) (context.Context, func()) {
+) (context.Context, func() context.Context) {
 	return WithFireAndForgetEffectHandler(
 		ctx,
 		config,

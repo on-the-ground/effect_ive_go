@@ -57,7 +57,7 @@ func waitChildren(ctx context.Context, wg *sync.WaitGroup) {
 	waitCh := make(chan struct{})
 	ready := make(chan struct{})
 	go func() {
-		ready <- struct{}{}
+		close(ready)
 		LogEffect(ctx, LogInfo, "waiting for all routines to finish", nil)
 		wg.Wait()
 		close(waitCh)
@@ -78,7 +78,7 @@ func waitChildren(ctx context.Context, wg *sync.WaitGroup) {
 func WithConcurrencyEffectHandler(
 	ctx context.Context,
 	bufferSize int,
-) (context.Context, func()) {
+) (context.Context, func() context.Context) {
 	const numWorkers = 1 // number of workers is not configurable for concurrency effect
 
 	wg := &sync.WaitGroup{}
