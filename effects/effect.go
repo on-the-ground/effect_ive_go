@@ -17,11 +17,11 @@ import (
 //
 //	ctx, cancel := WithResumablePartitionableEffectHandler(ctx, config, MyEffectEnum, handleFn)
 //	defer cancel()
-func WithResumablePartitionableEffectHandler[T effectmodel.Partitionable, R any](
+func WithResumablePartitionableEffectHandler[P effectmodel.Partitionable, R any](
 	ctx context.Context,
 	config effectmodel.EffectScopeConfig,
 	enum effectmodel.EffectEnum,
-	handleFn func(context.Context, T) (R, error),
+	handleFn func(context.Context, P) (R, error),
 	teardown ...func(),
 ) (context.Context, func() context.Context) {
 	td := normalizeTeardown(teardown)
@@ -41,16 +41,44 @@ func WithResumablePartitionableEffectHandler[T effectmodel.Partitionable, R any]
 	}
 }
 
+// WithResumableEffectHandler registers a resumable effect handler for a given effect enum.
+//
+// This handler is suitable for effects that don't require partitioning.
+// It can be used for one-shot effects or those that don't require ordering by key.
+func WithResumableEffectHandler[P effectmodel.Partitionable, R any](
+	ctx context.Context,
+	bufferSize int,
+	enum effectmodel.EffectEnum,
+	handleFn func(context.Context, P) (R, error),
+	teardown ...func(),
+) (context.Context, func() context.Context) {
+	td := normalizeTeardown(teardown)
+	handler := handlers.NewResumableHandler(ctx, bufferSize, handleFn, td)
+	ctxWith := context.WithValue(ctx, enum, handler)
+	LogEffect(ctxWith, LogDebug, "created resumable effect handler", map[string]interface{}{
+		"effectId": handler.EffectId,
+		"enum":     enum,
+	})
+	return ctxWith, func() context.Context {
+		handler.Close()
+		LogEffect(ctxWith, LogDebug, "closed resumable effect handler", map[string]interface{}{
+			"effectId": handler.EffectId,
+			"enum":     enum,
+		})
+		return ctx
+	}
+}
+
 // PerformResumableEffect sends a payload to the resumable effect handler and waits for the result.
 //
 // It returns the value sent through resumeCh by the handler logic.
 // Panics if no handler is registered for the given effect enum.
-func PerformResumableEffect[T effectmodel.Partitionable, R any](
+func PerformResumableEffect[P effectmodel.Partitionable, R any](
 	ctx context.Context,
 	enum effectmodel.EffectEnum,
-	payload T,
+	payload P,
 ) <-chan handlers.ResumableResult[R] {
-	handler := mustGetTypedValue[handlers.ResumableHandler[T, R]](
+	handler := mustGetTypedValue[handlers.ResumableHandler[P, R]](
 		func() (any, error) {
 			return hasHandler(ctx, enum)
 		},
@@ -62,15 +90,15 @@ func PerformResumableEffect[T effectmodel.Partitionable, R any](
 //
 // Suitable for one-shot effects like logging, telemetry, or background publishing.
 // This handler executes without returning a result.
-func WithFireAndForgetEffectHandler[T any](
+func WithFireAndForgetEffectHandler[P effectmodel.Partitionable](
 	ctx context.Context,
-	config effectmodel.EffectScopeConfig,
+	bufferSize int,
 	enum effectmodel.EffectEnum,
-	handleFn func(context.Context, T),
+	handleFn func(context.Context, P),
 	teardown ...func(),
 ) (context.Context, func() context.Context) {
 	td := normalizeTeardown(teardown)
-	handler := handlers.NewFireAndForgetHandler(ctx, config, handleFn, td)
+	handler := handlers.NewFireAndForgetHandler(ctx, bufferSize, handleFn, td)
 	ctxWith := context.WithValue(ctx, enum, handler)
 	LogEffect(ctxWith, LogDebug, "created fire/forget effect handler", map[string]interface{}{
 		"effectId": handler.EffectId,
@@ -90,12 +118,12 @@ func WithFireAndForgetEffectHandler[T any](
 //
 // The handler will process the payload asynchronously.
 // Panics if no handler is registered for the given enum.
-func FireAndForgetEffect[T any](
+func FireAndForgetEffect[P effectmodel.Partitionable](
 	ctx context.Context,
 	enum effectmodel.EffectEnum,
-	payload T,
+	payload P,
 ) {
-	handler := mustGetTypedValue[handlers.FireAndForgetHandler[T]](
+	handler := mustGetTypedValue[handlers.FireAndForgetHandler[P]](
 		func() (any, error) {
 			return hasHandler(ctx, enum)
 		},
@@ -107,11 +135,11 @@ func FireAndForgetEffect[T any](
 //
 // Hash-based dispatching ensures that effects with the same PartitionKey() are handled
 // by the same goroutine. Useful for ensuring ordering by key.
-func WithFireAndForgetPartitionableEffectHandler[T effectmodel.Partitionable](
+func WithFireAndForgetPartitionableEffectHandler[P effectmodel.Partitionable](
 	ctx context.Context,
 	config effectmodel.EffectScopeConfig,
 	enum effectmodel.EffectEnum,
-	handleFn func(context.Context, T),
+	handleFn func(context.Context, P),
 	teardown ...func(),
 ) (context.Context, func() context.Context) {
 	td := normalizeTeardown(teardown)
@@ -141,6 +169,6 @@ func normalizeTeardown(teardown []func()) func() {
 	case 0:
 		return func() {}
 	default:
-		panic("normalizeTeardown: only one teardown function allowed")
+		panic("normalizeTeardown: only one or zero teardown functions allowed")
 	}
 }

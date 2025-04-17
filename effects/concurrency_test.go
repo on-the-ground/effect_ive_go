@@ -11,14 +11,14 @@ import (
 
 func TestConcurrencyEffect_AllChildrenRunAndComplete(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLog := WithTestLogEffectHandler(ctx)
-	defer endOfLog()
+	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	defer endOfLogHandler()
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	ctx, endOfConcurrency := effects.WithConcurrencyEffectHandler(ctx, 10)
-	defer endOfConcurrency()
+	ctx, endOfConcurrencyHandler := effects.WithConcurrencyEffectHandler(ctx, 10)
+	defer endOfConcurrencyHandler()
 
 	var mu sync.Mutex
 	var ran []int
@@ -49,13 +49,13 @@ func TestConcurrencyEffect_AllChildrenRunAndComplete(t *testing.T) {
 
 func TestConcurrencyEffect_ContextCancelPropagatesToChildren(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLog := WithTestLogEffectHandler(ctx)
-	defer endOfLog()
+	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	defer endOfLogHandler()
 
 	ctx, cancel := context.WithCancel(ctx)
 
-	ctx, endOfConcurrency := effects.WithConcurrencyEffectHandler(ctx, 10)
-	defer endOfConcurrency()
+	ctx, endOfConcurrencyHandler := effects.WithConcurrencyEffectHandler(ctx, 10)
+	defer endOfConcurrencyHandler()
 
 	blocked := make(chan struct{})
 	unblocked := make(chan struct{})
@@ -81,11 +81,11 @@ func TestConcurrencyEffect_ContextCancelPropagatesToChildren(t *testing.T) {
 
 func TestConcurrencyEffect_HandlesPanicsGracefully(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLog := WithTestLogEffectHandler(ctx)
-	defer endOfLog()
+	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	defer endOfLogHandler()
 
-	ctx, endOfConcurrency := effects.WithConcurrencyEffectHandler(ctx, 10)
-	defer endOfConcurrency()
+	ctx, endOfConcurrencyHandler := effects.WithConcurrencyEffectHandler(ctx, 10)
+	defer endOfConcurrencyHandler()
 
 	done := make(chan struct{})
 	effects.ConcurrencyEffect(ctx, []func(context.Context){
@@ -106,11 +106,11 @@ func TestConcurrencyEffect_HandlesPanicsGracefully(t *testing.T) {
 
 func TestConcurrencyEffect_WaitsUntilAllChildrenFinish(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLog := WithTestLogEffectHandler(ctx)
-	defer endOfLog()
+	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	defer endOfLogHandler()
 
-	ctx, endOfConcurrency := effects.WithConcurrencyEffectHandler(ctx, 10)
-	defer endOfConcurrency() // trigger waitChildren and block until goroutines finish
+	ctx, endOfConcurrencyHandler := effects.WithConcurrencyEffectHandler(ctx, 10)
+	defer endOfConcurrencyHandler() // trigger waitChildren and block until goroutines finish
 
 	done := make(chan struct{})
 

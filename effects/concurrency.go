@@ -84,15 +84,13 @@ func WithConcurrencyEffectHandler(
 	ctx context.Context,
 	bufferSize int,
 ) (context.Context, func() context.Context) {
-	const numWorkers = 1 // number of workers is not configurable for concurrency effect
-
 	wg := &sync.WaitGroup{}
 
-	ctx, endOfConcurrency := WithFireAndForgetEffectHandler(
+	ctx, endOfConcurrencyHandler := WithFireAndForgetEffectHandler[ConcurrencyPayload](
 		ctx,
-		effectmodel.NewEffectScopeConfig(bufferSize, numWorkers),
+		bufferSize,
 		effectmodel.EffectConcurrency,
-		func(ctx context.Context, payload []func(context.Context)) {
+		func(ctx context.Context, payload ConcurrencyPayload) {
 			spawnConcurrentChildren(ctx, wg, payload)
 		},
 		func() {
@@ -100,7 +98,7 @@ func WithConcurrencyEffectHandler(
 		},
 	)
 
-	return ctx, endOfConcurrency
+	return ctx, endOfConcurrencyHandler
 }
 
 // WithConcurrencyEffectHandler installs a fire-and-forget concurrency effect handler.
@@ -110,6 +108,12 @@ func WithConcurrencyEffectHandler(
 // - Buffer size is configurable via binding effect.
 // - WaitGroup + cancellation tracking ensures children are joined on shutdown.
 // - Worker count is fixed to 1 (non-partitioned).
-func ConcurrencyEffect(ctx context.Context, payload []func(context.Context)) {
+func ConcurrencyEffect(ctx context.Context, payload ConcurrencyPayload) {
 	FireAndForgetEffect(ctx, effectmodel.EffectConcurrency, payload)
+}
+
+type ConcurrencyPayload []func(context.Context)
+
+func (cp ConcurrencyPayload) PartitionKey() string {
+	return "unpartitioned"
 }

@@ -38,7 +38,7 @@ func WithBindingEffectHandler(
 	bindingHandler := &bindingHandler{
 		bindingMap: normalizeBindingMap(bindingMap),
 	}
-	return WithResumablePartitionableEffectHandler(
+	return WithResumablePartitionableEffectHandler[BindingPayload, any](
 		ctx,
 		config,
 		effectmodel.EffectBinding,

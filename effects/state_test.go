@@ -15,8 +15,8 @@ import (
 func TestStateEffect_BasicLookup(t *testing.T) {
 	ctx := context.Background()
 
-	ctx, endOfLog := WithTestLogEffectHandler(ctx)
-	defer endOfLog()
+	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	defer endOfLogHandler()
 
 	ctx, closeFn := effects.WithStateEffectHandler(
 		ctx,
@@ -38,8 +38,8 @@ func TestStateEffect_BasicLookup(t *testing.T) {
 
 func TestStateEffect_KeyNotFound(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLog := WithTestLogEffectHandler(ctx)
-	defer endOfLog()
+	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	defer endOfLogHandler()
 	ctx, closeFn := effects.WithStateEffectHandler(
 		ctx,
 		effectmodel.NewEffectScopeConfig(1, 1),
@@ -58,8 +58,8 @@ func TestStateEffect_KeyNotFound(t *testing.T) {
 func TestStateEffect_DelegatesToUpperScope(t *testing.T) {
 	ctx := context.Background()
 
-	ctx, endOfLog := WithTestLogEffectHandler(ctx)
-	defer endOfLog()
+	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	defer endOfLogHandler()
 
 	upperCtx, upperClose := effects.WithStateEffectHandler(
 		ctx,
@@ -90,8 +90,8 @@ func TestStateEffect_DelegatesToUpperScope(t *testing.T) {
 func TestStateEffect_ConcurrentPartitionedAccess(t *testing.T) {
 	ctx := context.Background()
 
-	ctx, endOfLog := WithTestLogEffectHandler(ctx)
-	defer endOfLog()
+	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	defer endOfLogHandler()
 
 	// prepare key-value map
 	states := make(map[string]any)
@@ -158,8 +158,8 @@ func TestStateEffect_ConcurrentPartitionedAccess(t *testing.T) {
 
 func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLog := WithTestLogEffectHandler(ctx)
-	defer endOfLog()
+	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	defer endOfLogHandler()
 
 	ctx, cancel := effects.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(8, 8), map[string]any{
 		"x": "init",
@@ -191,8 +191,8 @@ func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 
 func TestStateEffect_ContextTimeout(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLog := WithTestLogEffectHandler(ctx)
-	defer endOfLog()
+	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	defer endOfLogHandler()
 
 	ctx, cancel := effects.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(1, 1), nil)
 	defer cancel()
@@ -213,8 +213,8 @@ func TestStateEffect_ContextTimeout(t *testing.T) {
 
 func TestStateEffect_SetAndGet(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLog := WithTestLogEffectHandler(ctx)
-	defer endOfLog()
+	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	defer endOfLogHandler()
 
 	ctx, cancel := effects.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(1, 1), nil)
 	defer cancel()
