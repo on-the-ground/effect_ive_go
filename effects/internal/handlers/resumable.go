@@ -7,9 +7,9 @@ import (
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 )
 
-func NewResumableEffectHandler[P any, R any](
+func NewResumableHandler[P any, R any](
 	ctx context.Context,
-	config effectmodel.EffectScopeConfig,
+	bufferSize int,
 	handleFn func(context.Context, P) (R, error),
 	teardown func(),
 ) ResumableHandler[P, R] {
@@ -17,9 +17,9 @@ func NewResumableEffectHandler[P any, R any](
 		effectScope: newEffectScope(
 			NewSingleQueue(
 				ctx,
-				config.BufferSize,
+				bufferSize,
 				func(ctx context.Context, msg ResumableEffectMessage[P, R]) {
-					msg.ResumeCh <- resumableResultFrom(handleFn(ctx, msg.Payload))
+					msg.ResumeCh <- ResumableResultFrom(handleFn(ctx, msg.Payload))
 					close(msg.ResumeCh)
 				},
 			),
@@ -42,7 +42,7 @@ func NewPartitionableResumableHandler[P effectmodel.Partitionable, R any](
 				config.NumWorkers,
 				config.BufferSize,
 				func(ctx context.Context, msg ResumableEffectMessage[P, R]) {
-					msg.ResumeCh <- resumableResultFrom(handleFn(ctx, msg.Payload))
+					msg.ResumeCh <- ResumableResultFrom(handleFn(ctx, msg.Payload))
 					close(msg.ResumeCh)
 				},
 			),
@@ -92,7 +92,7 @@ type ResumableResult[T any] struct {
 	Err   error
 }
 
-func resumableResultFrom[R any](res R, err error) ResumableResult[R] {
+func ResumableResultFrom[R any](res R, err error) ResumableResult[R] {
 	return ResumableResult[R]{Value: res, Err: err}
 }
 

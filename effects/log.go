@@ -32,6 +32,10 @@ type LogPayload struct {
 	Fields  map[string]interface{}
 }
 
+func (lp LogPayload) PartitionKey() string {
+	return "unpartitioned"
+}
+
 // WithZapLogEffectHandler registers a fire-and-forget log effect handler using zap.Logger.
 // It reads buffer size and worker count from the binding effect configuration.
 // The returned context includes the handler under the EffectLog enum.
@@ -40,12 +44,12 @@ type LogPayload struct {
 // The context returned by the teardown function should be used for further operations.
 func WithZapLogEffectHandler(
 	ctx context.Context,
-	config effectmodel.EffectScopeConfig,
+	bufferSize int,
 	logger *zap.Logger,
 ) (context.Context, func() context.Context) {
 	return WithFireAndForgetEffectHandler(
 		ctx,
-		config,
+		bufferSize,
 		effectmodel.EffectLog,
 		func(ctx context.Context, payload LogPayload) {
 			fields := make([]zap.Field, 0, len(payload.Fields))

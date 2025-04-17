@@ -9,14 +9,14 @@ import (
 
 func NewFireAndForgetHandler[T any](
 	ctx context.Context,
-	config effectmodel.EffectScopeConfig,
+	bufferSize int,
 	handleFn func(context.Context, T),
 	teardown func(),
 ) FireAndForgetHandler[T] {
 	ctx, cancelFn := context.WithCancel(ctx)
 	return FireAndForgetHandler[T]{
 		effectScope: newEffectScope(
-			NewSingleQueue(ctx, config.BufferSize, handleFn),
+			NewSingleQueue(ctx, bufferSize, handleFn),
 			func() {
 				cancelFn()
 				teardown()
