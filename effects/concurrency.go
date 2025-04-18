@@ -52,8 +52,8 @@ func WithConcurrencyEffectHandler(
 // - Buffer size is configurable via binding effect.
 // - WaitGroup + cancellation tracking ensures children are joined on shutdown.
 // - Worker count is fixed to 1 (non-partitioned).
-func ConcurrencyEffect(ctx context.Context, payload ConcurrencyPayload) {
-	FireAndForgetEffect(ctx, effectmodel.EffectConcurrency, payload)
+func ConcurrencyEffect(ctx context.Context, fns ...func(context.Context)) {
+	FireAndForgetEffect[ConcurrencyPayload](ctx, effectmodel.EffectConcurrency, fns)
 }
 
 type ConcurrencyPayload []func(context.Context)

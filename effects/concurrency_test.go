@@ -37,9 +37,7 @@ func TestConcurrencyEffect_AllChildrenRunAndComplete(t *testing.T) {
 		}
 	}
 
-	effects.ConcurrencyEffect(ctx, []func(context.Context){
-		f(1), f(2), f(3),
-	})
+	effects.ConcurrencyEffect(ctx, f(1), f(2), f(3))
 
 	wg.Wait()
 
@@ -63,13 +61,13 @@ func TestConcurrencyEffect_ContextCancelPropagatesToChildren(t *testing.T) {
 	blocked := make(chan struct{})
 	unblocked := make(chan struct{})
 
-	effects.ConcurrencyEffect(ctx, []func(context.Context){
+	effects.ConcurrencyEffect(ctx,
 		func(ctx context.Context) {
 			blocked <- struct{}{}
 			<-ctx.Done()
 			unblocked <- struct{}{}
 		},
-	})
+	)
 
 	<-blocked
 	cancel()
@@ -91,14 +89,14 @@ func TestConcurrencyEffect_HandlesPanicsGracefully(t *testing.T) {
 	defer endOfConcurrencyHandler()
 
 	done := make(chan struct{})
-	effects.ConcurrencyEffect(ctx, []func(context.Context){
+	effects.ConcurrencyEffect(ctx,
 		func(ctx context.Context) {
 			panic("child boom")
 		},
 		func(ctx context.Context) {
 			done <- struct{}{}
 		},
-	})
+	)
 
 	select {
 	case <-done:
@@ -125,13 +123,13 @@ func TestConcurrencyEffect_WaitsUntilAllChildrenFinish(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	wg.Add(numGoroutines)
-	effects.ConcurrencyEffect(ctx, []func(context.Context){
+	effects.ConcurrencyEffect(ctx,
 		sleep100msAndDone,
 		sleep100msAndDone,
 		sleep100msAndDone,
 		sleep100msAndDone,
 		sleep100msAndDone,
-	})
+	)
 
 	go func() {
 		wg.Wait()
@@ -167,16 +165,16 @@ func TestConcurrencyEffect_SpawnsAndCleansUpAll(t *testing.T) {
 	}
 
 	// First round
-	effects.ConcurrencyEffect(ctx, effects.ConcurrencyPayload{
+	effects.ConcurrencyEffect(ctx,
 		record("A1"),
 		record("A2"),
-	})
+	)
 
 	// Second round (before previous is complete)
-	effects.ConcurrencyEffect(ctx, effects.ConcurrencyPayload{
+	effects.ConcurrencyEffect(ctx,
 		record("B1"),
 		record("B2"),
-	})
+	)
 
 	// End scope - should block until all goroutines complete
 	ctx = endOfConcurrencyHandler()
