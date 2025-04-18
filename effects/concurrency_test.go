@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/on-the-ground/effect_ive_go/effects"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestConcurrencyEffect_AllChildrenRunAndComplete(t *testing.T) {
@@ -152,16 +153,16 @@ func TestConcurrencyEffect_SpawnsAndCleansUpAll(t *testing.T) {
 	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, endOfScope := effects.WithConcurrencyEffectHandler(ctx, 10)
+	ctx, endOfConcurrencyHandler := effects.WithConcurrencyEffectHandler(ctx, 10)
 
-	var mu sync.Mutex
-	var results []string
+	done := make(chan string, 4) // deterministic 수집
+	numRoutines := 0
+
 	record := func(name string) func(context.Context) {
-		return func(context.Context) {
-			time.Sleep(10 * time.Millisecond)
-			mu.Lock()
-			results = append(results, name)
-			mu.Unlock()
+		return func(ctx context.Context) {
+			time.Sleep(10 * time.Millisecond) // simulate work
+			numRoutines++
+			done <- name
 		}
 	}
 
@@ -177,12 +178,28 @@ func TestConcurrencyEffect_SpawnsAndCleansUpAll(t *testing.T) {
 		record("B2"),
 	})
 
-	// End of scope should wait for all
-	endOfScope()
+	// End scope - should block until all goroutines complete
+	ctx = endOfConcurrencyHandler()
 
-	// Check that all 4 have completed
-	want := []string{"A1", "A2", "B1", "B2"}
+	assert.Equal(t, numRoutines, 4, "Expected 4 goroutines to run")
+
+	// Collect all 4 names
+	var results []string
+	for i := 0; i < 4; i++ {
+		select {
+		case name := <-done:
+			effects.LogEffect(ctx, effects.LogInfo, "collected name", map[string]interface{}{
+				"name": name,
+			})
+			results = append(results, name)
+		case <-time.After(500 * time.Millisecond):
+			t.Fatalf("Timed out waiting for goroutine %d", i+1)
+		}
+	}
+
+	// Check we got exactly 4 expected names
 	sort.Strings(results)
+	want := []string{"A1", "A2", "B1", "B2"}
 	sort.Strings(want)
 
 	if !slices.Equal(results, want) {

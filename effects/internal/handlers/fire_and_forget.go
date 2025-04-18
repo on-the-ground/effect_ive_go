@@ -18,8 +18,8 @@ func NewFireAndForgetHandler[T any](
 		effectScope: newEffectScope(
 			NewSingleQueue(ctx, bufferSize, handleFn),
 			func() {
-				cancelFn()
 				teardown()
+				cancelFn()
 			},
 		),
 	}
@@ -36,8 +36,8 @@ func NewPartitionableFireAndForgetHandler[T effectmodel.Partitionable](
 		effectScope: newEffectScope(
 			NewPartitionedQueue(ctx, config.NumWorkers, config.BufferSize, handleFn),
 			func() {
-				cancelFn()
 				teardown()
+				cancelFn()
 			},
 		),
 	}
