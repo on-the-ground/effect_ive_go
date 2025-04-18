@@ -23,7 +23,7 @@ func NewOrderedBoundedBuffer[T any](capacity int, cmp CompareFunc[T]) *OrderedBo
 		data:     make([]T, 0, capacity),
 		capacity: capacity,
 		compare:  cmp,
-		sink:     make(chan T, capacity*2), // 여유 버퍼
+		sink:     make(chan T, capacity*2),
 	}
 }
 

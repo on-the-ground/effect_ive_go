@@ -14,7 +14,7 @@ func TestOrderedBoundedBuffer_InsertAndEviction(t *testing.T) {
 	})
 
 	// Insert 5 values, but buffer can only hold 3
-	inputs := []int{10, 5, 7, 3, 8} // 예상 정렬 순서: 3, 5, 7, 8, 10
+	inputs := []int{10, 5, 7, 3, 8} // expected order: 3, 5, 7, 8, 10
 	for _, v := range inputs {
 		err := buf.Insert(v)
 		if err != nil {
@@ -31,7 +31,7 @@ func TestOrderedBoundedBuffer_InsertAndEviction(t *testing.T) {
 		got = append(got, v)
 	}
 
-	// 예상 결과: evicted 3, 5 → flushed 7, 8, 10 → 총 [3 5 7 8 10]
+	// expected results: evicted 3, 5 → flushed 7, 8, 10 → 총 [3 5 7 8 10]
 	want := []int{3, 5, 7, 8, 10}
 	if !slices.Equal(got, want) {
 		t.Errorf("expected %v, got %v", want, got)

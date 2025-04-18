@@ -7,6 +7,7 @@ const (
 	EffectConcurrency EffectEnum = "effect_ive_go_effect_enum_concurrency"
 	EffectTask        EffectEnum = "effect_ive_go_effect_enum_task"
 	EffectState       EffectEnum = "effect_ive_go_effect_enum_state"
+	EffectStream      EffectEnum = "effect_ive_go_effect_enum_stream"
 	EffectBinding     EffectEnum = "effect_ive_go_effect_enum_binding"
 	ParentContextKey             = "effect_ive_go_parent_context_key"
 )
