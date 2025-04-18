@@ -105,11 +105,11 @@ func WithFireAndForgetEffectHandler[P effectmodel.Partitionable](
 		"enum":     enum,
 	})
 	return ctxWith, func() context.Context {
-		handler.Close()
-		LogEffect(ctxWith, LogDebug, "closed fire/forget effect handler", map[string]interface{}{
+		LogEffect(ctxWith, LogDebug, "closing fire/forget effect handler", map[string]interface{}{
 			"effectId": handler.EffectId,
 			"enum":     enum,
 		})
+		handler.Close()
 		return ctx
 	}
 }

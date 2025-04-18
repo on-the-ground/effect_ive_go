@@ -47,8 +47,8 @@ func NewPartitionableResumableHandler[P effectmodel.Partitionable, R any](
 				},
 			),
 			func() {
-				cancelFn()
 				teardown()
+				cancelFn()
 			},
 		),
 	}
