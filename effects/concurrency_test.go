@@ -2,6 +2,8 @@ package effects_test
 
 import (
 	"context"
+	"slices"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -143,4 +145,47 @@ func TestConcurrencyEffect_WaitsUntilAllChildrenFinish(t *testing.T) {
 		t.Fatal("handler did not wait for children to complete")
 	}
 
+}
+
+func TestConcurrencyEffect_SpawnsAndCleansUpAll(t *testing.T) {
+	ctx := context.Background()
+	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	defer endOfLogHandler()
+
+	ctx, endOfScope := effects.WithConcurrencyEffectHandler(ctx, 10)
+
+	var mu sync.Mutex
+	var results []string
+	record := func(name string) func(context.Context) {
+		return func(context.Context) {
+			time.Sleep(10 * time.Millisecond)
+			mu.Lock()
+			results = append(results, name)
+			mu.Unlock()
+		}
+	}
+
+	// First round
+	effects.ConcurrencyEffect(ctx, effects.ConcurrencyPayload{
+		record("A1"),
+		record("A2"),
+	})
+
+	// Second round (before previous is complete)
+	effects.ConcurrencyEffect(ctx, effects.ConcurrencyPayload{
+		record("B1"),
+		record("B2"),
+	})
+
+	// End of scope should wait for all
+	endOfScope()
+
+	// Check that all 4 have completed
+	want := []string{"A1", "A2", "B1", "B2"}
+	sort.Strings(results)
+	sort.Strings(want)
+
+	if !slices.Equal(results, want) {
+		t.Errorf("Expected %v, got %v", want, results)
+	}
 }
