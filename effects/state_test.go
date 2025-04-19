@@ -10,6 +10,8 @@ import (
 
 	"github.com/on-the-ground/effect_ive_go/effects"
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestStateEffect_BasicLookup(t *testing.T) {
@@ -231,4 +233,94 @@ func TestStateEffect_SetAndGet(t *testing.T) {
 	if v != 777 {
 		t.Fatalf("expected 777, got %v", v)
 	}
+}
+
+func collectEvents(ctx context.Context, source <-chan effects.TimeBoundedStatePayload) []string {
+	var result []string
+	for {
+		select {
+		case ev, ok := <-source:
+			if !ok {
+				fmt.Println("channel closed")
+				return result
+			}
+			switch payload := ev.StatePayload.(type) {
+			case effects.SetStatePayload:
+				effects.LogEffect(ctx, effects.LogDebug, "got event: Set", map[string]interface{}{"key": payload.Key})
+				result = append(result, "Set "+payload.Key)
+			case effects.DeleteStatePayload:
+				effects.LogEffect(ctx, effects.LogDebug, "got event: Delete", map[string]interface{}{"key": payload.Key})
+				result = append(result, "Delete "+payload.Key)
+			default:
+				effects.LogEffect(ctx, effects.LogDebug, "got unknown payload", map[string]interface{}{"payload": payload})
+			}
+		case <-time.After(500 * time.Millisecond):
+			effects.LogEffect(ctx, effects.LogDebug, "timeout waiting for event", nil)
+			return result
+		}
+	}
+}
+
+/* func collectEvents(source <-chan effects.TimeBoundedStatePayload) []string {
+	var result []string
+	for {
+		select {
+		case ev, ok := <-source:
+			if !ok {
+				return result
+			}
+			switch payload := ev.StatePayload.(type) {
+			case effects.SetStatePayload:
+				result = append(result, "Set "+payload.Key)
+			case effects.DeleteStatePayload:
+				result = append(result, "Delete "+payload.Key)
+			}
+		case <-time.After(100 * time.Millisecond):
+			return result
+		}
+	}
+} */
+
+var defaultConfig = effectmodel.EffectScopeConfig{NumWorkers: 1, BufferSize: 1}
+
+func TestStateSource_NoDelegation(t *testing.T) {
+	ctx := context.Background()
+	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	defer endOfLogHandler()
+
+	ctx, endOfState := effects.WithStateEffectHandler(ctx, defaultConfig, nil)
+	defer endOfState()
+
+	source, _ := effects.StateEffect(ctx, effects.SourceStatePayload{})
+	_, _ = effects.StateEffect(ctx, effects.SetStatePayload{Key: "a", Value: 1})
+	_, _ = effects.StateEffect(ctx, effects.DeleteStatePayload{Key: "a"})
+
+	got := collectEvents(ctx, source.(chan effects.TimeBoundedStatePayload))
+	want := []string{"Set a", "Delete a"}
+	assert.ElementsMatch(t, want, got)
+}
+
+func TestStateSource_WithDelegation(t *testing.T) {
+	ctx := context.Background()
+	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	defer endOfLogHandler()
+
+	// parent handler with a = 1
+	parentCtx, parentEnd := effects.WithStateEffectHandler(ctx, defaultConfig, map[string]any{
+		"a": 1,
+	})
+	defer parentEnd()
+
+	// child handler with delegation
+	childCtx, childEnd := effects.WithStateEffectHandler(parentCtx, defaultConfig, nil)
+	source, _ := effects.StateEffect(ctx, effects.SourceStatePayload{})
+
+	_, _ = effects.StateEffect(childCtx, effects.SetStatePayload{Key: "a", Value: 2}) // override
+	_, _ = effects.StateEffect(childCtx, effects.DeleteStatePayload{Key: "a"})        // delete locally
+
+	ctx = childEnd() // close source
+
+	got := collectEvents(ctx, source.(chan effects.TimeBoundedStatePayload))
+	want := []string{"Set a", "Delete a"}
+	assert.ElementsMatch(t, want, got)
 }
