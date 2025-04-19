@@ -39,12 +39,14 @@ func MustGetFromBindingEffect[T any](ctx context.Context, key string) T {
 	})
 }
 
-// hasHandler checks whether a handler for the given EffectEnum is registered in the context.
+var ErrNoEffectHandler = fmt.Errorf("no effect handler registered for this effect")
+
+// getHandler checks whether a handler for the given EffectEnum is registered in the context.
 // Returns an error if not found.
-func hasHandler(ctx context.Context, enum effectmodel.EffectEnum) (any, error) {
+func getHandler(ctx context.Context, enum effectmodel.EffectEnum) (any, error) {
 	raw := ctx.Value(enum)
 	if raw == nil {
-		return nil, fmt.Errorf("missing effect handler for %v", enum)
+		return nil, fmt.Errorf("%w: %v", ErrNoEffectHandler, enum)
 	}
 	return raw, nil
 }
