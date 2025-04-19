@@ -80,7 +80,7 @@ func PerformResumableEffect[P effectmodel.Partitionable, R any](
 ) <-chan handlers.ResumableResult[R] {
 	handler := mustGetTypedValue[handlers.ResumableHandler[P, R]](
 		func() (any, error) {
-			return hasHandler(ctx, enum)
+			return getHandler(ctx, enum)
 		},
 	)
 	return handler.PerformEffect(ctx, payload)
@@ -125,7 +125,7 @@ func FireAndForgetEffect[P effectmodel.Partitionable](
 ) {
 	handler := mustGetTypedValue[handlers.FireAndForgetHandler[P]](
 		func() (any, error) {
-			return hasHandler(ctx, enum)
+			return getHandler(ctx, enum)
 		},
 	)
 	handler.FireAndForgetEffect(ctx, payload)
