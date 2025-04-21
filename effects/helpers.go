@@ -10,8 +10,8 @@ import (
 // GetFromStateEffect fetches a typed value from the State effect using the provided key.
 // Returns a zero value and error if the key is not found or the type is mismatched.
 func GetFromStateEffect[T any](ctx context.Context, key string) (T, error) {
-	return getTypedValue[T](func() (any, error) {
-		return StateEffect(ctx, GetStatePayload{Key: key})
+	return getTypedValueOf[T](func() (any, error) {
+		return StateEffect(ctx, LoadStatePayload{Key: key})
 	})
 }
 
@@ -19,14 +19,14 @@ func GetFromStateEffect[T any](ctx context.Context, key string) (T, error) {
 // It panics if the key is missing or the type doesn't match.
 func MustGetFromStateEffect[T any](ctx context.Context, key string) T {
 	return mustGetTypedValue[T](func() (any, error) {
-		return StateEffect(ctx, GetStatePayload{Key: key})
+		return StateEffect(ctx, LoadStatePayload{Key: key})
 	})
 }
 
 // GetFromBindingEffect fetches a typed value from the Binding effect using the provided key.
 // Returns a zero value and error if the key is not found or the type is mismatched.
 func GetFromBindingEffect[T any](ctx context.Context, key string) (T, error) {
-	return getTypedValue[T](func() (any, error) {
+	return getTypedValueOf[T](func() (any, error) {
 		return BindingEffect(ctx, BindingPayload{Key: key})
 	})
 }
@@ -51,9 +51,9 @@ func getHandler(ctx context.Context, enum effectmodel.EffectEnum) (any, error) {
 	return raw, nil
 }
 
-// getTypedValue safely asserts the result of a getter function to the expected type T.
+// getTypedValueOf safely asserts the result of a getter function to the expected type T.
 // Returns an error if type assertion fails.
-func getTypedValue[T any](getFn func() (any, error)) (T, error) {
+func getTypedValueOf[T any](getFn func() (any, error)) (T, error) {
 	var zero T
 
 	res, err := getFn()
@@ -72,9 +72,24 @@ func getTypedValue[T any](getFn func() (any, error)) (T, error) {
 // mustGetTypedValue is the panic-on-failure variant of getTypedValue.
 // Use when failure should be fatal (e.g., when effect handler is guaranteed to exist).
 func mustGetTypedValue[T any](getFn func() (any, error)) T {
-	res, err := getTypedValue[T](getFn)
+	res, err := getTypedValueOf[T](getFn)
 	if err != nil {
 		panic(err)
 	}
 	return res
+}
+
+var ErrMaxAttempts = fmt.Errorf("max attempts reached")
+
+func retry(maxAttemps int, fn func() error) error {
+	numAttemps := 0
+	for {
+		err := fn()
+		if err == nil {
+			return nil
+		}
+		if numAttemps >= maxAttemps {
+			return fmt.Errorf("%w: %d, %w", ErrMaxAttempts, numAttemps, err)
+		}
+	}
 }
