@@ -70,6 +70,11 @@ func WithZapLogEffectHandler(
 				logger.Info(payload.Message, fields...)
 			}
 		},
+		func() {
+			if err := logger.Sync(); err != nil {
+				logger.Warn("failed to sync logger", zap.Error(err))
+			}
+		},
 	)
 }
 

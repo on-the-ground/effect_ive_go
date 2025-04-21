@@ -17,43 +17,56 @@ type SourceStatePayload struct{}
 func (SourceStatePayload) PartitionKey() string         { return "" }
 func (SourceStatePayload) sealedInterfaceStatePayload() {}
 
-var _ StatePayload = GetStatePayload{}
+var _ StatePayload = LoadStatePayload{}
 
-// GetStatePayload is the payload type for retrieving a value from the state.
-type GetStatePayload struct {
-	Key string
+// LoadStatePayload is the payload type for retrieving a value from the state.
+type LoadStatePayload struct {
+	Key any // should be comparable
 }
 
 // PartitionKey returns the partition key for routing this payload.
-func (p GetStatePayload) PartitionKey() string { return p.Key }
+func (p LoadStatePayload) PartitionKey() string {
+	return fmt.Sprintf("%v", p.Key)
+}
 
 // sealedInterfaceStatePayload prevents external packages from implementing statePayload.
-func (p GetStatePayload) sealedInterfaceStatePayload() {}
+func (p LoadStatePayload) sealedInterfaceStatePayload() {}
 
-var _ StatePayload = DeleteStatePayload{}
+var _ StatePayload = CompareAndDeleteStatePayload{}
 
-// DeleteStatePayload is the payload type for deleting a key from the state.
-type DeleteStatePayload struct {
-	Key string
+// CompareAndDeleteStatePayload is the payload type for deleting a key from the state.
+type CompareAndDeleteStatePayload struct {
+	Key any // should be comparable
+	Old any // should be comparable
 }
 
-func (p DeleteStatePayload) PartitionKey() string         { return p.Key }
-func (p DeleteStatePayload) sealedInterfaceStatePayload() {}
+func (p CompareAndDeleteStatePayload) PartitionKey() string {
+	return fmt.Sprintf("%v", p.Key)
+}
+func (p CompareAndDeleteStatePayload) sealedInterfaceStatePayload() {}
 
-type Equatable interface {
-	Equals(i any) bool
+var _ StatePayload = StoreStatePayload{}
+
+// StoreStatePayload is the payload type for deleting a key from the state.
+type StoreStatePayload struct {
+	Key any // should be comparable
+	New any // should be comparable
 }
 
-var _ StatePayload = SetStatePayload{}
+func (p StoreStatePayload) PartitionKey() string {
+	return fmt.Sprintf("%v", p.Key)
+}
+func (p StoreStatePayload) sealedInterfaceStatePayload() {}
 
-// SetStatePayload is the payload type for inserting or updating a key-value pair.
-type SetStatePayload struct {
-	Key   string
-	Value Equatable
+// CompareAndSwapStatePayload is the payload type for inserting or updating a key-value pair.
+type CompareAndSwapStatePayload struct {
+	Key any // should be comparable
+	New any // should be comparable
+	Old any // should be comparable
 }
 
-func (p SetStatePayload) PartitionKey() string         { return p.Key }
-func (p SetStatePayload) sealedInterfaceStatePayload() {}
+func (p CompareAndSwapStatePayload) PartitionKey() string         { return fmt.Sprintf("%v", p.Key) }
+func (p CompareAndSwapStatePayload) sealedInterfaceStatePayload() {}
 
 // StatePayload is a sealed interface for state operations.
 // Only predefined payload types (Set, Get, Delete) can implement this interface.
@@ -138,117 +151,72 @@ type stateHandler struct {
 	sink     chan TimeBoundedStatePayload
 }
 
-// getStateEffect retrieves the value for the given key from the state map.
-// If the key is not found, it delegates the effect to the upstream handler.
-// It returns the value, error (if any), and a boolean indicating if the effect was delegated.
-func (sH stateHandler) getStateEffect(ctx context.Context, payload GetStatePayload) (res any, err error, delegated bool) {
-	v, ok := sH.stateMap.Load(payload.Key)
-	if !ok {
-		res, err = delegateStateEffect(ctx, payload)
-		delegated = true
-	} else {
-		res = v
-		err = nil
-		delegated = false
-	}
-	return
-}
-
-var ErrOperationFailedWithMaxAttempts = fmt.Errorf("operation failed after max attempts")
-
 // handle routes the given payload to the appropriate state operation logic.
 func (sH stateHandler) handle(ctx context.Context, payload StatePayload) (any, error) {
-	maxAttempts := 10
 	switch payload := payload.(type) {
 
-	case SetStatePayload:
-		var res any
-		var err error
-		var delegated bool
-		var payloadWithTimeSpan TimeBoundedStatePayload
-
-		numAttempts := 0
-		for {
-			res, err, delegated = sH.getStateEffect(ctx, GetStatePayload{Key: payload.Key})
-			if unknowsErr := err != nil && !errors.Is(err, ErrKeyNotFound); unknowsErr {
-				return nil, err
-			}
-			if swapped := sH.stateMap.CompareAndSwap(payload.Key, res, payload.Value); swapped {
-				payloadWithTimeSpan = statePayloadWithNow(payload)
-				break
-			}
-			if numAttempts++; numAttempts >= maxAttempts {
-				return nil, fmt.Errorf("%w: %d attempts", ErrOperationFailedWithMaxAttempts, numAttempts)
-			}
+	case CompareAndSwapStatePayload:
+		if payload.Old == payload.New {
+			return true, nil
 		}
-
-		newForAll := errors.Is(err, ErrKeyNotFound)
-		newForLocal := delegated
-		localDiff := !newForLocal && !payload.Value.Equals(res)
-		if newForAll || newForLocal || localDiff {
-			ConcurrencyEffect(ctx, func(ctx context.Context) {
-				select {
-				case <-ctx.Done():
-				case sH.sink <- payloadWithTimeSpan:
-				}
-			})
+		if swapped := sH.stateMap.CompareAndSwap(payload.Key, payload.Old, payload.New); !swapped {
+			return false, nil
 		}
-
-		return nil, nil
-
-	case DeleteStatePayload:
-		var res any
-		var err error
-		var delegated bool
-		var payloadWithTimeSpan TimeBoundedStatePayload
-
-		numAttempts := 0
-		for {
-			res, err, delegated = sH.getStateEffect(ctx, GetStatePayload{Key: payload.Key})
-			if errors.Is(err, ErrKeyNotFound) {
-				return nil, nil
-			}
-			if err != nil {
-				return nil, err
-			}
-			if delegated {
-				return nil, nil
-			}
-			if deleted := sH.stateMap.CompareAndDelete(payload.Key, res); deleted {
-				payloadWithTimeSpan = statePayloadWithNow(payload)
-				break
-			}
-			if numAttempts++; numAttempts >= maxAttempts {
-				return nil, fmt.Errorf("%w: %d attempts", ErrOperationFailedWithMaxAttempts, numAttempts)
-			}
-		}
+		payloadWithTimeSpan := statePayloadWithNow(payload)
 
 		ConcurrencyEffect(ctx, func(ctx context.Context) {
 			select {
 			case <-ctx.Done():
 			case sH.sink <- payloadWithTimeSpan:
+			default:
 			}
+		})
 
+		return true, nil
+
+	case CompareAndDeleteStatePayload:
+		if deleted := sH.stateMap.CompareAndDelete(payload.Key, payload.Old); !deleted {
+			return false, nil
+		}
+		payloadWithTimeSpan := statePayloadWithNow(payload)
+
+		ConcurrencyEffect(ctx, func(ctx context.Context) {
+			select {
+			case <-ctx.Done():
+			case sH.sink <- payloadWithTimeSpan:
+			default:
+			}
 		})
 
 		return nil, nil
 
-	case GetStatePayload:
-		res, err, _ := sH.getStateEffect(ctx, payload)
-		return res, err
+	case LoadStatePayload:
+		v, ok := sH.stateMap.Load(payload.Key)
+		if !ok {
+			return delegateStateEffect(ctx, payload)
+		} else {
+			return v, nil
+		}
+
+	case StoreStatePayload:
+		sH.stateMap.Store(payload.Key, payload.New)
+		payloadWithTimeSpan := statePayloadWithNow(payload)
+		ConcurrencyEffect(ctx, func(ctx context.Context) {
+			select {
+			case <-ctx.Done():
+			case sH.sink <- payloadWithTimeSpan:
+			default:
+			}
+		})
+		return nil, nil
 
 	case SourceStatePayload:
 		return sH.sink, nil
 
 	default:
 		// This should never happen because we are using a sealed interface to prevent adding new types.
-		// But we still need to handle it to satisfy the compiler.
-		// This is a safety net.
-		// If this happens, it means that we have added a new type to the sealed interface
-		// without updating the switch statement.
 		// So we need to panic to avoid silent failures.
 		// This is a bug in the code.
-		// We need to fix it.
 		panic(fmt.Errorf("invalid state operation type: %T", payload))
 	}
 }
