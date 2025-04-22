@@ -1,4 +1,4 @@
-package effects_test
+package state_test
 
 import (
 	"context"
@@ -8,8 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/on-the-ground/effect_ive_go/effects"
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
+	"github.com/on-the-ground/effect_ive_go/effects/log"
+	"github.com/on-the-ground/effect_ive_go/effects/state"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,10 +19,10 @@ import (
 func TestStateEffect_BasicLookup(t *testing.T) {
 	ctx := context.Background()
 
-	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, closeFn := effects.WithStateEffectHandler(
+	ctx, closeFn := state.WithStateEffectHandler(
 		ctx,
 		effectmodel.NewEffectScopeConfig(1, 1),
 		map[string]any{
@@ -30,7 +31,7 @@ func TestStateEffect_BasicLookup(t *testing.T) {
 	)
 	defer closeFn()
 
-	v, err := effects.StateEffect(ctx, effects.LoadStatePayload{Key: "foo"})
+	v, err := state.StateEffect(ctx, state.LoadStatePayload{Key: "foo"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -41,9 +42,9 @@ func TestStateEffect_BasicLookup(t *testing.T) {
 
 func TestStateEffect_KeyNotFound(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
-	ctx, closeFn := effects.WithStateEffectHandler(
+	ctx, closeFn := state.WithStateEffectHandler(
 		ctx,
 		effectmodel.NewEffectScopeConfig(1, 1),
 		map[string]any{
@@ -52,7 +53,7 @@ func TestStateEffect_KeyNotFound(t *testing.T) {
 	)
 	defer closeFn()
 
-	_, err := effects.StateEffect(ctx, effects.LoadStatePayload{Key: "bar"})
+	_, err := state.StateEffect(ctx, state.LoadStatePayload{Key: "bar"})
 	if err == nil || !strings.Contains(err.Error(), "key not found") {
 		t.Fatalf("expected key-not-found error, got: %v", err)
 	}
@@ -61,10 +62,10 @@ func TestStateEffect_KeyNotFound(t *testing.T) {
 func TestStateEffect_DelegatesToUpperScope(t *testing.T) {
 	ctx := context.Background()
 
-	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	upperCtx, upperClose := effects.WithStateEffectHandler(
+	upperCtx, upperClose := state.WithStateEffectHandler(
 		ctx,
 		effectmodel.NewEffectScopeConfig(1, 1),
 		map[string]any{
@@ -74,14 +75,14 @@ func TestStateEffect_DelegatesToUpperScope(t *testing.T) {
 	defer upperClose()
 
 	lowerCtx := context.WithValue(upperCtx, "dummy", 1)
-	lowerCtx, lowerClose := effects.WithStateEffectHandler(
+	lowerCtx, lowerClose := state.WithStateEffectHandler(
 		lowerCtx,
 		effectmodel.NewEffectScopeConfig(1, 1),
 		nil,
 	)
 	defer lowerClose()
 
-	v, err := effects.StateEffect(lowerCtx, effects.LoadStatePayload{Key: "upper"})
+	v, err := state.StateEffect(lowerCtx, state.LoadStatePayload{Key: "upper"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -93,7 +94,7 @@ func TestStateEffect_DelegatesToUpperScope(t *testing.T) {
 func TestStateEffect_ConcurrentPartitionedAccess(t *testing.T) {
 	ctx := context.Background()
 
-	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	// prepare key-value map
@@ -104,7 +105,7 @@ func TestStateEffect_ConcurrentPartitionedAccess(t *testing.T) {
 	}
 
 	// register the state handler with partitioning
-	ctx, cancel := effects.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(10, 10), states)
+	ctx, cancel := state.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(10, 10), states)
 	defer cancel()
 
 	var (
@@ -125,7 +126,7 @@ func TestStateEffect_ConcurrentPartitionedAccess(t *testing.T) {
 			keyIdx := i % len(states) // deterministic but shuffled
 			key := fmt.Sprintf("key%d", keyIdx)
 
-			v, err := effects.StateEffect(ctx, effects.LoadStatePayload{Key: key})
+			v, err := state.StateEffect(ctx, state.LoadStatePayload{Key: key})
 			mu.Lock()
 			defer mu.Unlock()
 
@@ -161,10 +162,10 @@ func TestStateEffect_ConcurrentPartitionedAccess(t *testing.T) {
 
 func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, cancel := effects.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(8, 8), map[string]any{
+	ctx, cancel := state.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(8, 8), map[string]any{
 		"x": "init",
 	})
 	defer cancel()
@@ -179,12 +180,12 @@ func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 			key := fmt.Sprintf("key%d", i%10)
 
 			// Load current value
-			v, _ := effects.StateEffect(ctx, effects.LoadStatePayload{Key: key})
+			v, _ := state.StateEffect(ctx, state.LoadStatePayload{Key: key})
 
 			switch i % 4 {
 			case 0:
 				// Store unconditionally
-				_, err := effects.StateEffect(ctx, effects.StoreStatePayload{
+				_, err := state.StateEffect(ctx, state.StoreStatePayload{
 					Key: key,
 					New: i,
 				})
@@ -192,7 +193,7 @@ func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 
 			case 1:
 				// Compare and delete
-				deleted, err := effects.StateEffect(ctx, effects.CompareAndDeleteStatePayload{
+				deleted, err := state.StateEffect(ctx, state.CompareAndDeleteStatePayload{
 					Key: key,
 					Old: v,
 				})
@@ -202,7 +203,7 @@ func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 
 			case 2:
 				// Compare and swap
-				swapped, err := effects.StateEffect(ctx, effects.CompareAndSwapStatePayload{
+				swapped, err := state.StateEffect(ctx, state.CompareAndSwapStatePayload{
 					Key: key,
 					Old: v,
 					New: fmt.Sprintf("val-%d", i),
@@ -213,7 +214,7 @@ func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 
 			case 3:
 				// Just load again to add read load
-				_, _ = effects.StateEffect(ctx, effects.LoadStatePayload{Key: key})
+				_, _ = state.StateEffect(ctx, state.LoadStatePayload{Key: key})
 			}
 		}(i)
 	}
@@ -223,10 +224,10 @@ func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 
 func TestStateEffect_ContextTimeout(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, cancel := effects.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(1, 1), nil)
+	ctx, cancel := state.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(1, 1), nil)
 	defer cancel()
 
 	// simulate handler blocking by using a long operation in a goroutine (deliberately omitted)
@@ -237,7 +238,7 @@ func TestStateEffect_ContextTimeout(t *testing.T) {
 
 	time.Sleep(1 * time.Millisecond) // allow timeout to occur
 
-	res, err := effects.StateEffect(timeoutCtx, effects.LoadStatePayload{Key: "any"})
+	res, err := state.StateEffect(timeoutCtx, state.LoadStatePayload{Key: "any"})
 	if res != nil || err != nil {
 		t.Fatal("expected timeout")
 	}
@@ -245,46 +246,46 @@ func TestStateEffect_ContextTimeout(t *testing.T) {
 
 func TestStateEffect_SetAndGet(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, cancel := effects.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(1, 1), nil)
+	ctx, cancel := state.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(1, 1), nil)
 	defer cancel()
 
-	old, _ := effects.StateEffect(ctx, effects.LoadStatePayload{Key: "foo"})
-	effects.StateEffect(ctx, effects.StoreStatePayload{Key: "foo", New: (777)})
-	defer effects.LogEffect(ctx, effects.LogInfo, "swapped", map[string]any{
+	old, _ := state.StateEffect(ctx, state.LoadStatePayload{Key: "foo"})
+	state.StateEffect(ctx, state.StoreStatePayload{Key: "foo", New: (777)})
+	defer log.LogEffect(ctx, log.LogInfo, "swapped", map[string]any{
 		"old": old,
 		"new": 777,
 	})
 
-	v, err := effects.StateEffect(ctx, effects.LoadStatePayload{Key: "foo"})
+	v, err := state.StateEffect(ctx, state.LoadStatePayload{Key: "foo"})
 	assert.NoError(t, err)
 	assert.Equal(t, v, 777)
 }
 
 func TestStateEffect_SourcePayloadReturnsSink(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	ctx, end := effects.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(8, 8), nil)
+	ctx, end := state.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(8, 8), nil)
 	defer end()
 
 	// 1. Get sink channel from SourceStatePayload
-	chVal, err := effects.StateEffect(ctx, effects.SourceStatePayload{})
+	chVal, err := state.StateEffect(ctx, state.SourceStatePayload{})
 	require.NoError(t, err)
 
-	sink, ok := chVal.(chan effects.TimeBoundedStatePayload)
+	sink, ok := chVal.(chan state.TimeBoundedStatePayload)
 	require.True(t, ok, "expected sink channel from SourceStatePayload")
 
 	// 2. Send a StoreStatePayload
 	key := "test-key"
 	newVal := "new-value"
-	_, err = effects.StateEffect(ctx, effects.StoreStatePayload{
+	_, err = state.StateEffect(ctx, state.StoreStatePayload{
 		Key: key,
 		New: newVal,
 	})
@@ -293,7 +294,7 @@ func TestStateEffect_SourcePayloadReturnsSink(t *testing.T) {
 	// 3. Check the sink channel for the StoreStatePayload
 	select {
 	case payload := <-sink:
-		storePayload, ok := payload.StatePayload.(effects.StoreStatePayload)
+		storePayload, ok := payload.StatePayload.(state.StoreStatePayload)
 		require.True(t, ok)
 		assert.Equal(t, storePayload.Key, key)
 		assert.Equal(t, storePayload.New, newVal)
@@ -303,7 +304,7 @@ func TestStateEffect_SourcePayloadReturnsSink(t *testing.T) {
 
 	// 4. Send a CompareAndDeleteStatePayload
 	oldVal := "new-value"
-	_, err = effects.StateEffect(ctx, effects.CompareAndDeleteStatePayload{
+	_, err = state.StateEffect(ctx, state.CompareAndDeleteStatePayload{
 		Key: key,
 		Old: oldVal,
 	})
@@ -312,7 +313,7 @@ func TestStateEffect_SourcePayloadReturnsSink(t *testing.T) {
 	// 5. Check the sink channel for the CompareAndDeleteStatePayload
 	select {
 	case payload := <-sink:
-		storePayload, ok := payload.StatePayload.(effects.CompareAndDeleteStatePayload)
+		storePayload, ok := payload.StatePayload.(state.CompareAndDeleteStatePayload)
 		require.True(t, ok)
 		assert.Equal(t, storePayload.Key, key)
 		assert.Equal(t, storePayload.Old, oldVal)

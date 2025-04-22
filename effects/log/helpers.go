@@ -1,10 +1,9 @@
-package effects_test
+package log
 
 import (
 	"context"
 	"os"
 
-	"github.com/on-the-ground/effect_ive_go/effects"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -17,7 +16,7 @@ func WithTestLogEffectHandler(
 		zapcore.Lock(os.Stdout),
 		zap.DebugLevel,
 	)
-	return effects.WithZapLogEffectHandler(
+	return WithZapLogEffectHandler(
 		ctx,
 		1,
 		zap.New(consoleCore),

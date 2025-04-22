@@ -1,10 +1,12 @@
-package effects
+package concurrency
 
 import (
 	"context"
 	"sync"
 
+	"github.com/on-the-ground/effect_ive_go/effects"
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
+	"github.com/on-the-ground/effect_ive_go/effects/log"
 )
 
 // WithConcurrencyEffectHandler installs a fire-and-forget concurrency effect handler.
@@ -31,7 +33,7 @@ func WithConcurrencyEffectHandler(
 	}
 	sv.watchParentCancel(ctx)
 
-	ctx, endOfConcurrencyHandler := WithFireAndForgetEffectHandler(
+	ctx, endOfConcurrencyHandler := effects.WithFireAndForgetEffectHandler(
 		ctx,
 		bufferSize,
 		effectmodel.EffectConcurrency,
@@ -53,7 +55,7 @@ func WithConcurrencyEffectHandler(
 // - WaitGroup + cancellation tracking ensures children are joined on shutdown.
 // - Worker count is fixed to 1 (non-partitioned).
 func ConcurrencyEffect(ctx context.Context, fns ...func(context.Context)) {
-	FireAndForgetEffect[ConcurrencyPayload](ctx, effectmodel.EffectConcurrency, fns)
+	effects.FireAndForgetEffect[ConcurrencyPayload](ctx, effectmodel.EffectConcurrency, fns)
 }
 
 type ConcurrencyPayload []func(context.Context)
@@ -93,7 +95,7 @@ func (s *supervisor) watchParentCancel(parentContext context.Context) {
 			close(s.readyCh)
 			select {
 			case <-parentContext.Done():
-				LogEffect(parentContext, LogInfo, "context cancelled, waiting for all routines to finish", nil)
+				log.LogEffect(parentContext, log.LogInfo, "context cancelled, waiting for all routines to finish", nil)
 				for _, cancelFn := range s.childrenCancels {
 					cancelFn()
 				}
@@ -128,7 +130,7 @@ func (s *supervisor) spawnConcurrentChildren(
 			defer s.wg.Done()
 			defer func() {
 				if r := recover(); r != nil {
-					LogEffect(parentContext, LogError, "panic in child routine", map[string]interface{}{
+					log.LogEffect(parentContext, log.LogError, "panic in child routine", map[string]interface{}{
 						"routine": f,
 						"error":   r,
 					})
@@ -150,12 +152,12 @@ func (s *supervisor) waitChildren(ctx context.Context) {
 	ready := make(chan struct{})
 	go func() {
 		close(ready)
-		LogEffect(ctx, LogInfo, "waiting for all routines to finish", nil)
+		log.LogEffect(ctx, log.LogInfo, "waiting for all routines to finish", nil)
 		s.wg.Wait()
 		close(waitCh)
 	}()
 	<-ready
 
 	<-waitCh
-	LogEffect(ctx, LogInfo, "all routines finished", nil)
+	log.LogEffect(ctx, log.LogInfo, "all routines finished", nil)
 }

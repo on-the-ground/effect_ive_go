@@ -1,4 +1,4 @@
-package effects_test
+package concurrency_test
 
 import (
 	"context"
@@ -8,19 +8,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/on-the-ground/effect_ive_go/effects"
-	"github.com/stretchr/testify/assert"
+	"github.com/on-the-ground/effect_ive_go/effects/concurrency"
+	"github.com/on-the-ground/effect_ive_go/effects/log"
 )
 
 func TestConcurrencyEffect_AllChildrenRunAndComplete(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	ctx, endOfConcurrencyHandler := effects.WithConcurrencyEffectHandler(ctx, 10)
+	ctx, endOfConcurrencyHandler := concurrency.WithConcurrencyEffectHandler(ctx, 10)
 	defer endOfConcurrencyHandler()
 
 	var mu sync.Mutex
@@ -37,7 +37,7 @@ func TestConcurrencyEffect_AllChildrenRunAndComplete(t *testing.T) {
 		}
 	}
 
-	effects.ConcurrencyEffect(ctx, f(1), f(2), f(3))
+	concurrency.ConcurrencyEffect(ctx, f(1), f(2), f(3))
 
 	wg.Wait()
 
@@ -50,18 +50,18 @@ func TestConcurrencyEffect_AllChildrenRunAndComplete(t *testing.T) {
 
 func TestConcurrencyEffect_ContextCancelPropagatesToChildren(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	ctx, cancel := context.WithCancel(ctx)
 
-	ctx, endOfConcurrencyHandler := effects.WithConcurrencyEffectHandler(ctx, 10)
+	ctx, endOfConcurrencyHandler := concurrency.WithConcurrencyEffectHandler(ctx, 10)
 	defer endOfConcurrencyHandler()
 
 	blocked := make(chan struct{})
 	unblocked := make(chan struct{})
 
-	effects.ConcurrencyEffect(ctx,
+	concurrency.ConcurrencyEffect(ctx,
 		func(ctx context.Context) {
 			blocked <- struct{}{}
 			<-ctx.Done()
@@ -82,14 +82,14 @@ func TestConcurrencyEffect_ContextCancelPropagatesToChildren(t *testing.T) {
 
 func TestConcurrencyEffect_HandlesPanicsGracefully(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, endOfConcurrencyHandler := effects.WithConcurrencyEffectHandler(ctx, 10)
+	ctx, endOfConcurrencyHandler := concurrency.WithConcurrencyEffectHandler(ctx, 10)
 	defer endOfConcurrencyHandler()
 
 	done := make(chan struct{})
-	effects.ConcurrencyEffect(ctx,
+	concurrency.ConcurrencyEffect(ctx,
 		func(ctx context.Context) {
 			panic("child boom")
 		},
@@ -107,10 +107,10 @@ func TestConcurrencyEffect_HandlesPanicsGracefully(t *testing.T) {
 
 func TestConcurrencyEffect_WaitsUntilAllChildrenFinish(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, endOfConcurrencyHandler := effects.WithConcurrencyEffectHandler(ctx, 10)
+	ctx, endOfConcurrencyHandler := concurrency.WithConcurrencyEffectHandler(ctx, 10)
 	defer endOfConcurrencyHandler() // trigger waitChildren and block until goroutines finish
 
 	done := make(chan struct{})
@@ -123,7 +123,7 @@ func TestConcurrencyEffect_WaitsUntilAllChildrenFinish(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	wg.Add(numGoroutines)
-	effects.ConcurrencyEffect(ctx,
+	concurrency.ConcurrencyEffect(ctx,
 		sleep100msAndDone,
 		sleep100msAndDone,
 		sleep100msAndDone,
@@ -148,45 +148,45 @@ func TestConcurrencyEffect_WaitsUntilAllChildrenFinish(t *testing.T) {
 
 func TestConcurrencyEffect_SpawnsAndCleansUpAll(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, endOfConcurrencyHandler := effects.WithConcurrencyEffectHandler(ctx, 10)
+	ctx, endOfConcurrencyHandler := concurrency.WithConcurrencyEffectHandler(ctx, 10)
 
-	done := make(chan string, 4) // deterministic 수집
-	numRoutines := 0
+	done := make(chan string, 4)
+	var wg sync.WaitGroup
+	wg.Add(4)
 
 	record := func(name string) func(context.Context) {
 		return func(ctx context.Context) {
-			time.Sleep(10 * time.Millisecond) // simulate work
-			numRoutines++
+			defer wg.Done()
+			time.Sleep(10 * time.Millisecond)
 			done <- name
 		}
 	}
 
-	// First round
-	effects.ConcurrencyEffect(ctx,
+	// Spawn
+	concurrency.ConcurrencyEffect(ctx,
 		record("A1"),
 		record("A2"),
 	)
-
-	// Second round (before previous is complete)
-	effects.ConcurrencyEffect(ctx,
+	concurrency.ConcurrencyEffect(ctx,
 		record("B1"),
 		record("B2"),
 	)
 
-	// End scope - should block until all goroutines complete
+	// Wait for all goroutines to finish
+	wg.Wait()
+
+	// Ensure all cleanup is done
 	ctx = endOfConcurrencyHandler()
 
-	assert.Equal(t, numRoutines, 4, "Expected 4 goroutines to run")
-
-	// Collect all 4 names
+	// Collect all results
 	var results []string
 	for i := 0; i < 4; i++ {
 		select {
 		case name := <-done:
-			effects.LogEffect(ctx, effects.LogInfo, "collected name", map[string]interface{}{
+			log.LogEffect(ctx, log.LogInfo, "collected name", map[string]interface{}{
 				"name": name,
 			})
 			results = append(results, name)
@@ -195,7 +195,7 @@ func TestConcurrencyEffect_SpawnsAndCleansUpAll(t *testing.T) {
 		}
 	}
 
-	// Check we got exactly 4 expected names
+	// Check correctness
 	sort.Strings(results)
 	want := []string{"A1", "A2", "B1", "B2"}
 	sort.Strings(want)

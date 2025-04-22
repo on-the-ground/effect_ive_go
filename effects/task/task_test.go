@@ -1,4 +1,4 @@
-package effects_test
+package task_test
 
 import (
 	"context"
@@ -6,19 +6,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/on-the-ground/effect_ive_go/effects"
 	"github.com/on-the-ground/effect_ive_go/effects/internal/handlers"
+	"github.com/on-the-ground/effect_ive_go/effects/log"
+	"github.com/on-the-ground/effect_ive_go/effects/task"
 )
 
 func TestTaskEffect_Success(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, endOfTaskHandler := effects.WithTaskEffectHandler[string](ctx, 1)
+	ctx, endOfTaskHandler := task.WithTaskEffectHandler[string](ctx, 1)
 	defer endOfTaskHandler()
 
-	ch := effects.TaskEffect(ctx, func(ctx context.Context) (string, error) {
+	ch := task.TaskEffect(ctx, func(ctx context.Context) (string, error) {
 		time.Sleep(50 * time.Millisecond)
 		return "ok", nil
 	})
@@ -38,16 +39,16 @@ func TestTaskEffect_Success(t *testing.T) {
 
 func TestTaskEffect_Cancelled(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Millisecond)
 	defer cancel()
 
-	ctx, endOfTaskHandler := effects.WithTaskEffectHandler[string](ctx, 1)
+	ctx, endOfTaskHandler := task.WithTaskEffectHandler[string](ctx, 1)
 	defer endOfTaskHandler()
 
-	ch := effects.TaskEffect(ctx, func(ctx context.Context) (string, error) {
+	ch := task.TaskEffect(ctx, func(ctx context.Context) (string, error) {
 		time.Sleep(100 * time.Millisecond)
 		return "too late", nil
 	})
@@ -64,16 +65,16 @@ func TestTaskEffect_Cancelled(t *testing.T) {
 
 func TestTaskEffect_Parallel(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, endOfTaskHandler := effects.WithTaskEffectHandler[int](ctx, 10)
+	ctx, endOfTaskHandler := task.WithTaskEffectHandler[int](ctx, 10)
 	defer endOfTaskHandler()
 
 	var results = make([]<-chan handlers.ResumableResult[int], 0)
 	for i := 0; i < 5; i++ {
 		n := i
-		ch := effects.TaskEffect(ctx, func(ctx context.Context) (int, error) {
+		ch := task.TaskEffect(ctx, func(ctx context.Context) (int, error) {
 			time.Sleep(time.Duration(10+n*10) * time.Millisecond)
 			return n * 2, nil
 		})
