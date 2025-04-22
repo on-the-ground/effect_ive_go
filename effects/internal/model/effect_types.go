@@ -1,5 +1,7 @@
 package effectmodel
 
+import "fmt"
+
 type EffectEnum string
 
 const (
@@ -33,3 +35,5 @@ func NewEffectScopeConfig(bufferSize int, numWorkers int) EffectScopeConfig {
 type Partitionable interface {
 	PartitionKey() string
 }
+
+var ErrNoEffectHandler = fmt.Errorf("no effect handler registered for this effect")

@@ -1,8 +1,9 @@
-package effects
+package task
 
 import (
 	"context"
 
+	"github.com/on-the-ground/effect_ive_go/effects"
 	"github.com/on-the-ground/effect_ive_go/effects/internal/handlers"
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 )
@@ -19,7 +20,7 @@ func WithTaskEffectHandler[R any](
 	ctx context.Context,
 	bufferSize int,
 ) (context.Context, func() context.Context) {
-	ctx, endOfTaskHandler := WithResumableEffectHandler(
+	ctx, endOfTaskHandler := effects.WithResumableEffectHandler(
 		ctx,
 		bufferSize,
 		effectmodel.EffectTask,
@@ -43,5 +44,5 @@ func WithTaskEffectHandler[R any](
 
 // TaskEffect performs an asynchronous task and returns a channel with the result.
 func TaskEffect[R any](ctx context.Context, payload TaskPayload[R]) <-chan handlers.ResumableResult[R] {
-	return PerformResumableEffect[TaskPayload[R], R](ctx, effectmodel.EffectTask, payload)
+	return effects.PerformResumableEffect[TaskPayload[R], R](ctx, effectmodel.EffectTask, payload)
 }

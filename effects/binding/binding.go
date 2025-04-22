@@ -1,9 +1,10 @@
-package effects
+package binding
 
 import (
 	"context"
 	"fmt"
 
+	"github.com/on-the-ground/effect_ive_go/effects"
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 )
 
@@ -38,7 +39,7 @@ func WithBindingEffectHandler(
 	bindingHandler := &bindingHandler{
 		bindingMap: normalizeBindingMap(bindingMap),
 	}
-	return WithResumablePartitionableEffectHandler[BindingPayload, any](
+	return effects.WithResumablePartitionableEffectHandler[BindingPayload, any](
 		ctx,
 		config,
 		effectmodel.EffectBinding,
@@ -50,7 +51,7 @@ func WithBindingEffectHandler(
 //
 // Returns either the value found or an error if the key is not found and no upper scope provides it.
 func BindingEffect(ctx context.Context, payload BindingPayload) (val any, err error) {
-	resultCh := PerformResumableEffect[BindingPayload, any](ctx, effectmodel.EffectBinding, payload)
+	resultCh := effects.PerformResumableEffect[BindingPayload, any](ctx, effectmodel.EffectBinding, payload)
 	select {
 	case res := <-resultCh:
 		val = res.Value

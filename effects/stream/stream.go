@@ -1,11 +1,15 @@
-package effects
+package stream
 
 import (
 	"context"
 	"fmt"
 	"sync"
 
+	"github.com/on-the-ground/effect_ive_go/effects"
+	"github.com/on-the-ground/effect_ive_go/effects/concurrency"
+	"github.com/on-the-ground/effect_ive_go/effects/internal/helper"
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
+	"github.com/on-the-ground/effect_ive_go/effects/log"
 	"go.uber.org/zap"
 )
 
@@ -56,12 +60,12 @@ func (p SubscribeStreamPayload[T]) PartitionKey() string {
 
 func WithStreamEffectHandler[T any](parentCtx context.Context, bufferSize int) (context.Context, func() context.Context) {
 
-	ctx, endOfConcurrencyHandler := WithConcurrencyEffectHandler(parentCtx, bufferSize)
+	ctx, endOfConcurrencyHandler := concurrency.WithConcurrencyEffectHandler(parentCtx, bufferSize)
 
 	reg := channelRegistry[T]{
 		Map: &sync.Map{},
 	}
-	ctx, endOfStreamHandler := WithFireAndForgetEffectHandler(
+	ctx, endOfStreamHandler := effects.WithFireAndForgetEffectHandler(
 		ctx,
 		bufferSize,
 		effectmodel.EffectStream,
@@ -89,19 +93,19 @@ type SinkList[T any] struct {
 func StreamEffect[T any](ctx context.Context, payload streamEffectPayload) {
 	switch msg := payload.(type) {
 	case MapStreamPayloadAny:
-		ConcurrencyEffect(ctx, msg.Run)
+		concurrency.ConcurrencyEffect(ctx, msg.Run)
 	case FilterStreamPayload[T]:
-		ConcurrencyEffect(ctx, func(ctx context.Context) {
+		concurrency.ConcurrencyEffect(ctx, func(ctx context.Context) {
 			filter(ctx, msg.Source, msg.Sink, msg.Predicate)
 		})
 	case MergeStreamPayload[T]:
 		for _, source := range msg.Sources {
-			ConcurrencyEffect(ctx, func(ctx context.Context) {
+			concurrency.ConcurrencyEffect(ctx, func(ctx context.Context) {
 				pipe(ctx, source, msg.Sink)
 			})
 		}
 	case SubscribeStreamPayload[T]:
-		FireAndForgetEffect(ctx, effectmodel.EffectStream, msg)
+		effects.FireAndForgetEffect(ctx, effectmodel.EffectStream, msg)
 
 	default:
 		// StreamEffect is sealed interface, so this should never happen
@@ -121,13 +125,13 @@ func (reg channelRegistry[T]) handleSubscriptionEffect(ctx context.Context, msg 
 	firstSink = !ok
 	if firstSink {
 		reg.Store(msg.Source.String(), &SinkList[T]{List: []chan<- T{msg.Sink}})
-		ConcurrencyEffect(ctx, func(ctx context.Context) {
+		concurrency.ConcurrencyEffect(ctx, func(ctx context.Context) {
 			logger, _ := zap.NewProduction()
-			ctx, endOfLogHandler := WithZapLogEffectHandler(ctx, 10, logger)
+			ctx, endOfLogHandler := log.WithZapLogEffectHandler(ctx, 10, logger)
 			defer endOfLogHandler()
 			defer func() {
 				if r := recover(); r != nil {
-					LogEffect(ctx, LogError, "panic while registering sink", map[string]interface{}{
+					log.LogEffect(ctx, log.LogError, "panic while registering sink", map[string]interface{}{
 						"error": r,
 						"key":   msg.Source,
 					})
@@ -140,7 +144,7 @@ func (reg channelRegistry[T]) handleSubscriptionEffect(ctx context.Context, msg 
 
 	oldSinks, ok := raw.(*SinkList[T])
 	if !ok {
-		LogEffect(ctx, LogError, "fail to cast sinks", map[string]interface{}{
+		log.LogEffect(ctx, log.LogError, "fail to cast sinks", map[string]interface{}{
 			"key": msg.Source,
 		})
 		return
@@ -160,7 +164,7 @@ func (reg channelRegistry[T]) handleSubscriptionEffect(ctx context.Context, msg 
 		// race condition, the sink was already updated
 		// We need to retry the operation
 		err := fmt.Errorf("fail to append new sink")
-		LogEffect(ctx, LogDebug, "tryRegistreSink: ", map[string]interface{}{
+		log.LogEffect(ctx, log.LogDebug, "tryRegistreSink: ", map[string]interface{}{
 			"error": err,
 			"key":   msg.Source,
 		})
@@ -168,8 +172,8 @@ func (reg channelRegistry[T]) handleSubscriptionEffect(ctx context.Context, msg 
 	}
 
 	maxAttemps := 5
-	if err := retry(maxAttemps, tryRegisterSink); err != nil {
-		LogEffect(ctx, LogError, "fail to append new sink after max attempts", map[string]interface{}{
+	if err := helper.Retry(maxAttemps, tryRegisterSink); err != nil {
+		log.LogEffect(ctx, log.LogError, "fail to append new sink after max attempts", map[string]interface{}{
 			"error": err,
 			"key":   msg.Source,
 		})
@@ -182,7 +186,7 @@ func (reg *channelRegistry[T]) arbit(ctx context.Context, source SourceAsKey[T])
 	var sinks *SinkList[T]
 	defer func() {
 		if sinks == nil {
-			LogEffect(ctx, LogError, "sinks is nil; skipping cleanup", map[string]interface{}{"key": source})
+			log.LogEffect(ctx, log.LogError, "sinks is nil; skipping cleanup", map[string]interface{}{"key": source})
 			return
 		}
 		for _, sink := range sinks.List {
@@ -191,7 +195,7 @@ func (reg *channelRegistry[T]) arbit(ctx context.Context, source SourceAsKey[T])
 		}
 		// Remove the sinks from the registry
 		if deleted := reg.CompareAndDelete(source.String(), sinks); !deleted {
-			LogEffect(ctx, LogError, "fail to unregister sinks", map[string]interface{}{
+			log.LogEffect(ctx, log.LogError, "fail to unregister sinks", map[string]interface{}{
 				"key": source,
 			})
 		}
@@ -199,11 +203,11 @@ func (reg *channelRegistry[T]) arbit(ctx context.Context, source SourceAsKey[T])
 	for v := range source {
 		// Reload the sinks when the message is received
 		if raw, ok := reg.Load(source.String()); !ok {
-			LogEffect(ctx, LogError, "fail to load sinks, dropped an message", map[string]interface{}{
+			log.LogEffect(ctx, log.LogError, "fail to load sinks, dropped an message", map[string]interface{}{
 				"value": v,
 			})
 		} else if sinks, ok = raw.(*SinkList[T]); !ok {
-			LogEffect(ctx, LogError, "fail to cast sinks, dropped an message", map[string]interface{}{
+			log.LogEffect(ctx, log.LogError, "fail to cast sinks, dropped an message", map[string]interface{}{
 				"value": v,
 			})
 		}
@@ -216,7 +220,7 @@ func (reg *channelRegistry[T]) arbit(ctx context.Context, source SourceAsKey[T])
 				return
 			default:
 				// If the sink is full, we can drop the message
-				LogEffect(ctx, LogError, "fail to send message to sink, dropped an message", map[string]interface{}{
+				log.LogEffect(ctx, log.LogError, "fail to send message to sink, dropped an message", map[string]interface{}{
 					"value": v,
 				})
 			}

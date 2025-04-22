@@ -1,8 +1,9 @@
-package effects
+package log
 
 import (
 	"context"
 
+	"github.com/on-the-ground/effect_ive_go/effects"
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 	"go.uber.org/zap"
 )
@@ -47,7 +48,7 @@ func WithZapLogEffectHandler(
 	bufferSize int,
 	logger *zap.Logger,
 ) (context.Context, func() context.Context) {
-	return WithFireAndForgetEffectHandler(
+	return effects.WithFireAndForgetEffectHandler(
 		ctx,
 		bufferSize,
 		effectmodel.EffectLog,
@@ -81,7 +82,7 @@ func WithZapLogEffectHandler(
 // LogEffect performs a fire-and-forget log effect using the EffectLog handler in the context.
 // This should be used to emit structured logs within an effect-managed execution scope.
 func LogEffect(ctx context.Context, level LogLevel, msg string, fields map[string]interface{}) {
-	FireAndForgetEffect(ctx, effectmodel.EffectLog, LogPayload{
+	effects.FireAndForgetEffect(ctx, effectmodel.EffectLog, LogPayload{
 		Level:   level,
 		Message: msg,
 		Fields:  fields,

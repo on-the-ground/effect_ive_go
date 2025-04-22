@@ -1,4 +1,4 @@
-package effects
+package state
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/on-the-ground/effect_ive_go/effects"
+	"github.com/on-the-ground/effect_ive_go/effects/concurrency"
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 )
 
@@ -89,7 +91,7 @@ func WithStateEffectHandler(
 	config effectmodel.EffectScopeConfig,
 	initMap map[string]any,
 ) (context.Context, func() context.Context) {
-	ctx, endOfConcurrency := WithConcurrencyEffectHandler(ctx, config.BufferSize)
+	ctx, endOfConcurrency := concurrency.WithConcurrencyEffectHandler(ctx, config.BufferSize)
 	sink := make(chan TimeBoundedStatePayload, 2*config.NumWorkers)
 	stateHandler := &stateHandler{
 		stateMap: &sync.Map{},
@@ -98,7 +100,7 @@ func WithStateEffectHandler(
 	for k, v := range initMap {
 		stateHandler.stateMap.Store(k, v)
 	}
-	return WithResumablePartitionableEffectHandler(
+	return effects.WithResumablePartitionableEffectHandler(
 		ctx,
 		config,
 		effectmodel.EffectState,
@@ -112,7 +114,7 @@ func WithStateEffectHandler(
 
 // StateEffect performs a state operation (get, set, delete) using the EffectState handler.
 func StateEffect(ctx context.Context, payload StatePayload) (val any, err error) {
-	resultCh := PerformResumableEffect[StatePayload, any](ctx, effectmodel.EffectState, payload)
+	resultCh := effects.PerformResumableEffect[StatePayload, any](ctx, effectmodel.EffectState, payload)
 	select {
 	case res := <-resultCh:
 		val = res.Value
@@ -129,7 +131,7 @@ var ErrKeyNotFound = fmt.Errorf("key not found")
 func delegateStateEffect(upperCtx context.Context, payload StatePayload) (res any, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			if r, ok := r.(error); ok && errors.Is(r, ErrNoEffectHandler) {
+			if r, ok := r.(error); ok && errors.Is(r, effectmodel.ErrNoEffectHandler) {
 				// Handle panic and return a nil value with an error
 				// indicating that the effect handler is not available to delegate.
 				res = nil
@@ -164,7 +166,7 @@ func (sH stateHandler) handle(ctx context.Context, payload StatePayload) (any, e
 		}
 		payloadWithTimeSpan := statePayloadWithNow(payload)
 
-		ConcurrencyEffect(ctx, func(ctx context.Context) {
+		concurrency.ConcurrencyEffect(ctx, func(ctx context.Context) {
 			select {
 			case <-ctx.Done():
 			case sH.sink <- payloadWithTimeSpan:
@@ -180,7 +182,7 @@ func (sH stateHandler) handle(ctx context.Context, payload StatePayload) (any, e
 		}
 		payloadWithTimeSpan := statePayloadWithNow(payload)
 
-		ConcurrencyEffect(ctx, func(ctx context.Context) {
+		concurrency.ConcurrencyEffect(ctx, func(ctx context.Context) {
 			select {
 			case <-ctx.Done():
 			case sH.sink <- payloadWithTimeSpan:
@@ -201,7 +203,7 @@ func (sH stateHandler) handle(ctx context.Context, payload StatePayload) (any, e
 	case StoreStatePayload:
 		sH.stateMap.Store(payload.Key, payload.New)
 		payloadWithTimeSpan := statePayloadWithNow(payload)
-		ConcurrencyEffect(ctx, func(ctx context.Context) {
+		concurrency.ConcurrencyEffect(ctx, func(ctx context.Context) {
 			select {
 			case <-ctx.Done():
 			case sH.sink <- payloadWithTimeSpan:
@@ -224,9 +226,9 @@ func (sH stateHandler) handle(ctx context.Context, payload StatePayload) (any, e
 // TimeBoundedStatePayload is a wrapper for StatePayload with a time span.
 type TimeBoundedStatePayload struct {
 	StatePayload
-	TimeSpan
+	effects.TimeSpan
 }
 
 func statePayloadWithNow(payload StatePayload) TimeBoundedStatePayload {
-	return TimeBoundedStatePayload{StatePayload: payload, TimeSpan: Now()}
+	return TimeBoundedStatePayload{StatePayload: payload, TimeSpan: effects.Now()}
 }

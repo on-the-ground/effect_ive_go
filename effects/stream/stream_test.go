@@ -1,4 +1,4 @@
-package effects_test
+package stream_test
 
 import (
 	"context"
@@ -7,16 +7,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/on-the-ground/effect_ive_go/effects"
+	"github.com/on-the-ground/effect_ive_go/effects/log"
+	"github.com/on-the-ground/effect_ive_go/effects/stream"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestStreamEffect_MapFilterMerge(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, end := effects.WithStreamEffectHandler[int](ctx, 10)
+	ctx, end := stream.WithStreamEffectHandler[int](ctx, 10)
 	defer end()
 
 	source := make(chan int)
@@ -24,7 +25,7 @@ func TestStreamEffect_MapFilterMerge(t *testing.T) {
 	filterSink := make(chan string)
 
 	// Step 1: Map (int -> string)
-	effects.StreamEffect[int](ctx, effects.MapStreamPayload[int, string]{
+	stream.StreamEffect[int](ctx, stream.MapStreamPayload[int, string]{
 		Source: source,
 		Sink:   mapSink,
 		MapFn: func(v int) string {
@@ -33,7 +34,7 @@ func TestStreamEffect_MapFilterMerge(t *testing.T) {
 	})
 
 	// Step 2: Filter (only even values)
-	effects.StreamEffect[string](ctx, effects.FilterStreamPayload[string]{
+	stream.StreamEffect[string](ctx, stream.FilterStreamPayload[string]{
 		Source:    mapSink,
 		Sink:      filterSink,
 		Predicate: func(v string) bool { return v == "v=2" || v == "v=4" },
@@ -69,10 +70,10 @@ func TestStreamEffect_MapFilterMerge(t *testing.T) {
 
 func TestStreamEffect_ShutdownPropagation(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, end := effects.WithStreamEffectHandler[int](ctx, 10)
+	ctx, end := stream.WithStreamEffectHandler[int](ctx, 10)
 	defer end()
 
 	source := make(chan int)
@@ -82,7 +83,7 @@ func TestStreamEffect_ShutdownPropagation(t *testing.T) {
 	done := make(chan string, 3) // map/filter/consumer
 
 	// MapEffect
-	effects.StreamEffect[int](ctx, effects.MapStreamPayload[int, string]{
+	stream.StreamEffect[int](ctx, stream.MapStreamPayload[int, string]{
 		Source: source,
 		Sink:   mapSink,
 		MapFn: func(v int) string {
@@ -91,7 +92,7 @@ func TestStreamEffect_ShutdownPropagation(t *testing.T) {
 	})
 
 	// FilterEffect
-	effects.StreamEffect[string](ctx, effects.FilterStreamPayload[string]{
+	stream.StreamEffect[string](ctx, stream.FilterStreamPayload[string]{
 		Source:    mapSink,
 		Sink:      filterSink,
 		Predicate: func(v string) bool { return strings.HasSuffix(v, "2") || strings.HasSuffix(v, "4") },
@@ -146,11 +147,11 @@ func TestStreamEffect_ShutdownPropagation(t *testing.T) {
 
 func TestSubscribeStreamPayload_OneSinkReceivesEvent(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	// Step 1: Setup stream system
-	ctx, endOfStreamHandler := effects.WithStreamEffectHandler[int](ctx, 32)
+	ctx, endOfStreamHandler := stream.WithStreamEffectHandler[int](ctx, 32)
 	defer endOfStreamHandler()
 
 	// Step 2: Setup source and sink
@@ -158,7 +159,7 @@ func TestSubscribeStreamPayload_OneSinkReceivesEvent(t *testing.T) {
 	sink := make(chan int)
 
 	// Step 3: Subscribe
-	effects.StreamEffect[int](ctx, effects.SubscribeStreamPayload[int]{
+	stream.StreamEffect[int](ctx, stream.SubscribeStreamPayload[int]{
 		Source: source,
 		Sink:   sink,
 	})
@@ -198,11 +199,11 @@ func TestSubscribeStreamPayload_OneSinkReceivesEvent(t *testing.T) {
 
 func TestSubscribeStreamPayload_MultipleSinksSequentiallyReceiveEvent(t *testing.T) {
 	ctx := context.Background()
-	ctx, logEnd := WithTestLogEffectHandler(ctx)
+	ctx, logEnd := log.WithTestLogEffectHandler(ctx)
 	defer logEnd()
 
 	// 1. Prepare stream system
-	ctx, teardown := effects.WithStreamEffectHandler[int](ctx, 32)
+	ctx, teardown := stream.WithStreamEffectHandler[int](ctx, 32)
 	defer teardown()
 
 	// 2. Prepare source & sink
@@ -211,7 +212,7 @@ func TestSubscribeStreamPayload_MultipleSinksSequentiallyReceiveEvent(t *testing
 	sink2 := make(chan int, 1)
 
 	// 3. Subscribe sink1
-	effects.StreamEffect[int](ctx, effects.SubscribeStreamPayload[int]{
+	stream.StreamEffect[int](ctx, stream.SubscribeStreamPayload[int]{
 		Source: source,
 		Sink:   sink1,
 	})
@@ -219,7 +220,7 @@ func TestSubscribeStreamPayload_MultipleSinksSequentiallyReceiveEvent(t *testing
 	time.Sleep(10 * time.Millisecond) // arbit startup 보장용
 
 	// 4. Subscribe sink2
-	effects.StreamEffect[int](ctx, effects.SubscribeStreamPayload[int]{
+	stream.StreamEffect[int](ctx, stream.SubscribeStreamPayload[int]{
 		Source: source,
 		Sink:   sink2,
 	})

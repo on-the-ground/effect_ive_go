@@ -1,4 +1,4 @@
-package effects_test
+package binding_test
 
 import (
 	"context"
@@ -7,17 +7,18 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/on-the-ground/effect_ive_go/effects"
+	"github.com/on-the-ground/effect_ive_go/effects/binding"
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
+	"github.com/on-the-ground/effect_ive_go/effects/log"
 )
 
 func TestBindingEffect_BasicLookup(t *testing.T) {
 	ctx := context.Background()
 
-	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, closeFn := effects.WithBindingEffectHandler(
+	ctx, closeFn := binding.WithBindingEffectHandler(
 		ctx,
 		effectmodel.NewEffectScopeConfig(1, 1),
 		map[string]any{
@@ -26,7 +27,7 @@ func TestBindingEffect_BasicLookup(t *testing.T) {
 	)
 	defer closeFn()
 
-	v, err := effects.BindingEffect(ctx, effects.BindingPayload{Key: "foo"})
+	v, err := binding.BindingEffect(ctx, binding.BindingPayload{Key: "foo"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -37,9 +38,9 @@ func TestBindingEffect_BasicLookup(t *testing.T) {
 
 func TestBindingEffect_KeyNotFound(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
-	ctx, closeFn := effects.WithBindingEffectHandler(
+	ctx, closeFn := binding.WithBindingEffectHandler(
 		ctx,
 		effectmodel.NewEffectScopeConfig(1, 1),
 		map[string]any{
@@ -48,7 +49,7 @@ func TestBindingEffect_KeyNotFound(t *testing.T) {
 	)
 	defer closeFn()
 
-	_, err := effects.BindingEffect(ctx, effects.BindingPayload{Key: "bar"})
+	_, err := binding.BindingEffect(ctx, binding.BindingPayload{Key: "bar"})
 	if err == nil || !strings.Contains(err.Error(), "key not found") {
 		t.Fatalf("expected key-not-found error, got: %v", err)
 	}
@@ -57,10 +58,10 @@ func TestBindingEffect_KeyNotFound(t *testing.T) {
 func TestBindingEffect_DelegatesToUpperScope(t *testing.T) {
 	ctx := context.Background()
 
-	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	upperCtx, upperClose := effects.WithBindingEffectHandler(
+	upperCtx, upperClose := binding.WithBindingEffectHandler(
 		ctx,
 		effectmodel.NewEffectScopeConfig(1, 1),
 		map[string]any{
@@ -70,14 +71,14 @@ func TestBindingEffect_DelegatesToUpperScope(t *testing.T) {
 	defer upperClose()
 
 	lowerCtx := context.WithValue(upperCtx, "dummy", 1)
-	lowerCtx, lowerClose := effects.WithBindingEffectHandler(
+	lowerCtx, lowerClose := binding.WithBindingEffectHandler(
 		lowerCtx,
 		effectmodel.NewEffectScopeConfig(1, 1),
 		nil,
 	)
 	defer lowerClose()
 
-	v, err := effects.BindingEffect(lowerCtx, effects.BindingPayload{Key: "upper"})
+	v, err := binding.BindingEffect(lowerCtx, binding.BindingPayload{Key: "upper"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -89,7 +90,7 @@ func TestBindingEffect_DelegatesToUpperScope(t *testing.T) {
 func TestBindingEffect_ConcurrentPartitionedAccess(t *testing.T) {
 	ctx := context.Background()
 
-	ctx, endOfLogHandler := WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	// prepare key-value map
@@ -100,7 +101,7 @@ func TestBindingEffect_ConcurrentPartitionedAccess(t *testing.T) {
 	}
 
 	// register the binding handler with partitioning
-	ctx, cancel := effects.WithBindingEffectHandler(ctx, effectmodel.NewEffectScopeConfig(10, 10), bindings)
+	ctx, cancel := binding.WithBindingEffectHandler(ctx, effectmodel.NewEffectScopeConfig(10, 10), bindings)
 	defer cancel()
 
 	var (
@@ -121,7 +122,7 @@ func TestBindingEffect_ConcurrentPartitionedAccess(t *testing.T) {
 			keyIdx := i % len(bindings) // deterministic but shuffled
 			key := fmt.Sprintf("key%d", keyIdx)
 
-			v, err := effects.BindingEffect(ctx, effects.BindingPayload{Key: key})
+			v, err := binding.BindingEffect(ctx, binding.BindingPayload{Key: key})
 			mu.Lock()
 			defer mu.Unlock()
 
