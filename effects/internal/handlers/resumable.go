@@ -19,7 +19,11 @@ func NewResumableHandler[P any, R any](
 				ctx,
 				bufferSize,
 				func(ctx context.Context, msg ResumableEffectMessage[P, R]) {
-					msg.ResumeCh <- ResumableResultFrom(handleFn(ctx, msg.Payload))
+					select {
+					case <-ctx.Done():
+					case msg.ResumeCh <- ResumableResultFrom(handleFn(ctx, msg.Payload)):
+					}
+
 					close(msg.ResumeCh)
 				},
 			),
@@ -42,7 +46,10 @@ func NewPartitionableResumableHandler[P effectmodel.Partitionable, R any](
 				config.NumWorkers,
 				config.BufferSize,
 				func(ctx context.Context, msg ResumableEffectMessage[P, R]) {
-					msg.ResumeCh <- ResumableResultFrom(handleFn(ctx, msg.Payload))
+					select {
+					case <-ctx.Done():
+					case msg.ResumeCh <- ResumableResultFrom(handleFn(ctx, msg.Payload)):
+					}
 					close(msg.ResumeCh)
 				},
 			),

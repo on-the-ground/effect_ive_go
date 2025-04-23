@@ -53,11 +53,15 @@ func WithBindingEffectHandler(
 func BindingEffect(ctx context.Context, payload BindingPayload) (val any, err error) {
 	resultCh := effects.PerformResumableEffect[BindingPayload, any](ctx, effectmodel.EffectBinding, payload)
 	select {
-	case res := <-resultCh:
-		val = res.Value
-		err = res.Err
+	case res, ok := <-resultCh:
+		if ok {
+			val = res.Value
+			err = res.Err
+			return
+		}
 	case <-ctx.Done():
 	}
+	err = ctx.Err()
 	return
 }
 

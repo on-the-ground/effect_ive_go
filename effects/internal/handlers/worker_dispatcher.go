@@ -36,7 +36,10 @@ func NewSingleQueue[T any](
 		close(ready)
 		for {
 			select {
-			case msg := <-ch:
+			case msg, ok := <-ch:
+				if !ok {
+					return
+				}
 				handleFn(ctx, msg)
 			case <-ctx.Done():
 				return
@@ -75,7 +78,10 @@ func NewPartitionedQueue[T effectmodel.Partitionable](
 			ready.Done()
 			for {
 				select {
-				case msg := <-ch:
+				case msg, ok := <-ch:
+					if !ok {
+						return
+					}
 					handleFn(ctx, msg)
 				case <-ctx.Done():
 					return

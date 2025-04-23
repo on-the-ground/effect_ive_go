@@ -116,11 +116,15 @@ func WithStateEffectHandler(
 func StateEffect(ctx context.Context, payload StatePayload) (val any, err error) {
 	resultCh := effects.PerformResumableEffect[StatePayload, any](ctx, effectmodel.EffectState, payload)
 	select {
-	case res := <-resultCh:
-		val = res.Value
-		err = res.Err
+	case res, ok := <-resultCh:
+		if ok {
+			val = res.Value
+			err = res.Err
+			return
+		}
 	case <-ctx.Done():
 	}
+	err = ctx.Err()
 	return
 }
 

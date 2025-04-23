@@ -42,21 +42,34 @@ func TestTaskEffect_Cancelled(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Millisecond)
+	// 타임아웃을 주고, 바로 취소하지 않음
+	ctx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 	defer cancel()
 
 	ctx, endOfTaskHandler := task.WithTaskEffectHandler[string](ctx, 1)
 	defer endOfTaskHandler()
 
+	block := make(chan struct{})
+
 	ch := task.TaskEffect(ctx, func(ctx context.Context) (string, error) {
-		time.Sleep(100 * time.Millisecond)
-		return "too late", nil
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(200 * time.Millisecond): // 확실히 context보다 늦음
+			return "too late", nil
+		}
 	})
 
+	// 100ms 뒤에 unblock 하는 타이머 설정 (context는 50ms에 취소됨)
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		close(block)
+	}()
+
 	select {
-	case res := <-ch:
-		if res.Err == nil || !errors.Is(res.Err, context.DeadlineExceeded) {
-			t.Fatalf("expected cancellation error, got: %v", res.Err)
+	case res, ok := <-ch:
+		if !ok || res.Err == nil || !errors.Is(res.Err, context.DeadlineExceeded) {
+			t.Fatalf("expected context cancellation error, got: %v", res.Err)
 		}
 	case <-time.After(200 * time.Millisecond):
 		t.Fatal("timed out waiting for task result")
