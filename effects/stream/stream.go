@@ -9,6 +9,7 @@ import (
 	"github.com/on-the-ground/effect_ive_go/effects/concurrency"
 	"github.com/on-the-ground/effect_ive_go/effects/internal/helper"
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
+	"github.com/on-the-ground/effect_ive_go/effects/internal/orderedbuffer"
 	"github.com/on-the-ground/effect_ive_go/effects/log"
 	"go.uber.org/zap"
 )
@@ -51,6 +52,11 @@ func StreamEffect[T any](ctx context.Context, payload streamEffectPayload) {
 		}
 	case SubscribeStreamPayload[T]:
 		effects.FireAndForgetEffect(ctx, effectmodel.EffectStream, msg)
+
+	case OrderByStreamPayload[T]:
+		concurrency.ConcurrencyEffect(ctx, func(ctx context.Context) {
+			orderBy(ctx, msg.WindowSize, msg.CmpFn, msg.Source, msg.Sink)
+		})
 
 	default:
 		// StreamEffect is sealed interface, so this should never happen
@@ -199,6 +205,36 @@ func filter[T any](ctx context.Context, source <-chan T, sink chan<- T, predicat
 			case <-ctx.Done():
 				return
 			}
+		}
+	}
+}
+
+func orderBy[T any](ctx context.Context, windowSize int, cmp orderedbuffer.CompareFunc[T], source <-chan T, sink chan<- T) {
+
+	buf := orderedbuffer.NewOrderedBoundedBuffer(windowSize, cmp)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for ordered := range buf.Source() {
+			select {
+			case <-ctx.Done():
+			case sink <- ordered:
+			}
+		}
+	}()
+
+	defer func() {
+		buf.Close(ctx)
+		<-done
+		close(sink)
+	}()
+
+	for v := range source {
+		ok := buf.Insert(ctx, v)
+		if !ok {
+			log.LogEffect(ctx, log.LogDebug, "ordered buffer closed", map[string]interface{}{})
+			return
 		}
 	}
 }

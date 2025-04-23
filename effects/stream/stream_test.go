@@ -3,6 +3,7 @@ package stream_test
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -265,4 +266,44 @@ func TestSubscribeStreamPayload_MultipleSinksSequentiallyReceiveEvent(t *testing
 
 	expectClosed(sink1, "sink1")
 	expectClosed(sink2, "sink2")
+}
+
+func TestStreamEffect_OrderByStreamPayload_SortsCorrectly(t *testing.T) {
+	ctx := context.Background()
+	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	defer endOfLogHandler()
+
+	ctx, teardown := stream.WithStreamEffectHandler[int](ctx, 32)
+	defer teardown()
+
+	source := make(chan int)
+	sink := make(chan int)
+
+	// Source will push out-of-order values
+	go func() {
+		defer close(source)
+		source <- 42
+		source <- 7
+		source <- 19
+		source <- 3
+	}()
+
+	stream.StreamEffect[int](ctx, stream.OrderByStreamPayload[int]{
+		WindowSize: 5,
+		Source:     source,
+		Sink:       sink,
+		CmpFn: func(a, b int) int {
+			return a - b
+		},
+	})
+
+	var results []int
+	for v := range sink {
+		results = append(results, v)
+	}
+
+	expected := []int{3, 7, 19, 42}
+	if !slices.Equal(results, expected) {
+		t.Errorf("Expected sorted output %v, got %v", expected, results)
+	}
 }
