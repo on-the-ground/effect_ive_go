@@ -1,6 +1,7 @@
 package orderedbuffer
 
 import (
+	"context"
 	"errors"
 	"sort"
 )
@@ -27,7 +28,7 @@ func NewOrderedBoundedBuffer[T any](capacity int, cmp CompareFunc[T]) *OrderedBo
 	}
 }
 
-func (b *OrderedBoundedBuffer[T]) Insert(val T) error {
+func (b *OrderedBoundedBuffer[T]) Insert(ctx context.Context, val T) error {
 	if b.closed {
 		return ErrClosedBuffer
 	}
@@ -43,7 +44,11 @@ func (b *OrderedBoundedBuffer[T]) Insert(val T) error {
 	if len(b.data) > b.capacity {
 		evicted := b.data[0]
 		b.data = b.data[1:]
-		b.sink <- evicted
+		select {
+		case <-ctx.Done():
+		case b.sink <- evicted:
+		}
+
 	}
 
 	return nil
@@ -53,7 +58,7 @@ func (b *OrderedBoundedBuffer[T]) Source() <-chan T {
 	return b.sink
 }
 
-func (b *OrderedBoundedBuffer[T]) Close() {
+func (b *OrderedBoundedBuffer[T]) Close(ctx context.Context) {
 	if b.closed {
 		return
 	}
@@ -62,7 +67,10 @@ func (b *OrderedBoundedBuffer[T]) Close() {
 	done := make(chan struct{})
 	go func() {
 		for _, v := range b.data {
-			b.sink <- v
+			select {
+			case <-ctx.Done():
+			case b.sink <- v:
+			}
 		}
 		close(b.sink)
 		close(done)

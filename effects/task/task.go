@@ -2,6 +2,7 @@ package task
 
 import (
 	"context"
+	"errors"
 
 	"github.com/on-the-ground/effect_ive_go/effects"
 	"github.com/on-the-ground/effect_ive_go/effects/internal/handlers"
@@ -26,12 +27,35 @@ func WithTaskEffectHandler[R any](
 		effectmodel.EffectTask,
 		func(ctx context.Context, asyncFn TaskPayload[R]) (R, error) {
 			done := make(chan handlers.ResumableResult[R], 1)
+			ready := make(chan struct{})
 			go func() {
-				done <- handlers.ResumableResultFrom(asyncFn(ctx))
+				close(ready)
+
+				select {
+				case <-ctx.Done():
+					close(done)
+					return
+				default:
+				}
+
+				res := handlers.ResumableResultFrom(asyncFn(ctx))
+
+				select {
+				case <-ctx.Done():
+					// don't send result
+				default:
+					done <- res
+				}
 				close(done)
 			}()
+			<-ready
+
 			select {
-			case res := <-done:
+			case res, ok := <-done:
+				if !ok {
+					var zero R
+					return zero, errors.New("task result channel closed")
+				}
 				return res.Value, res.Err
 			case <-ctx.Done():
 				return *new(R), ctx.Err()

@@ -1,6 +1,7 @@
 package orderedbuffer_test
 
 import (
+	"context"
 	"errors"
 	"slices"
 	"testing"
@@ -9,6 +10,7 @@ import (
 )
 
 func TestOrderedBoundedBuffer_InsertAndEviction(t *testing.T) {
+	ctx := context.Background()
 	buf := orderedbuffer.NewOrderedBoundedBuffer(3, func(a, b int) int {
 		return a - b
 	})
@@ -16,14 +18,14 @@ func TestOrderedBoundedBuffer_InsertAndEviction(t *testing.T) {
 	// Insert 5 values, but buffer can only hold 3
 	inputs := []int{10, 5, 7, 3, 8} // expected order: 3, 5, 7, 8, 10
 	for _, v := range inputs {
-		err := buf.Insert(v)
+		err := buf.Insert(ctx, v)
 		if err != nil {
 			t.Fatalf("unexpected error inserting %d: %v", v, err)
 		}
 	}
 
 	// Close buffer to flush remaining values
-	buf.Close()
+	buf.Close(ctx)
 
 	// Drain from Source
 	var got []int
@@ -39,14 +41,16 @@ func TestOrderedBoundedBuffer_InsertAndEviction(t *testing.T) {
 }
 
 func TestOrderedBoundedBuffer_InsertAfterClose(t *testing.T) {
+	ctx := context.Background()
+
 	buf := orderedbuffer.NewOrderedBoundedBuffer(2, func(a, b int) int {
 		return a - b
 	})
 
-	_ = buf.Insert(1)
-	buf.Close()
+	_ = buf.Insert(ctx, 1)
+	buf.Close(ctx)
 
-	err := buf.Insert(2)
+	err := buf.Insert(ctx, 2)
 	if !errors.Is(err, orderedbuffer.ErrClosedBuffer) {
 		t.Errorf("expected ErrClosedBuffer, got %v", err)
 	}

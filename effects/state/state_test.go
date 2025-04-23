@@ -239,9 +239,12 @@ func TestStateEffect_ContextTimeout(t *testing.T) {
 	time.Sleep(1 * time.Millisecond) // allow timeout to occur
 
 	res, err := state.StateEffect(timeoutCtx, state.LoadStatePayload{Key: "any"})
-	if res != nil || err != nil {
-		t.Fatal("expected timeout")
-	}
+	log.LogEffect(ctx, log.LogInfo, "final result", map[string]interface{}{
+		"res": res,
+		"err": err,
+	})
+	assert.Nil(t, res)
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
 }
 
 func TestStateEffect_SetAndGet(t *testing.T) {
