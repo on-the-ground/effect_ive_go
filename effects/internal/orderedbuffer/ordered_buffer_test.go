@@ -2,11 +2,11 @@ package orderedbuffer_test
 
 import (
 	"context"
-	"errors"
 	"slices"
 	"testing"
 
 	"github.com/on-the-ground/effect_ive_go/effects/internal/orderedbuffer"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestOrderedBoundedBuffer_InsertAndEviction(t *testing.T) {
@@ -18,10 +18,8 @@ func TestOrderedBoundedBuffer_InsertAndEviction(t *testing.T) {
 	// Insert 5 values, but buffer can only hold 3
 	inputs := []int{10, 5, 7, 3, 8} // expected order: 3, 5, 7, 8, 10
 	for _, v := range inputs {
-		err := buf.Insert(ctx, v)
-		if err != nil {
-			t.Fatalf("unexpected error inserting %d: %v", v, err)
-		}
+		ok := buf.Insert(ctx, v)
+		assert.Truef(t, ok, "unexpected error inserting %d", v)
 	}
 
 	// Close buffer to flush remaining values
@@ -50,8 +48,6 @@ func TestOrderedBoundedBuffer_InsertAfterClose(t *testing.T) {
 	_ = buf.Insert(ctx, 1)
 	buf.Close(ctx)
 
-	err := buf.Insert(ctx, 2)
-	if !errors.Is(err, orderedbuffer.ErrClosedBuffer) {
-		t.Errorf("expected ErrClosedBuffer, got %v", err)
-	}
+	ok := buf.Insert(ctx, 2)
+	assert.False(t, ok, "expected ErrClosedBuffer")
 }
