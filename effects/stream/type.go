@@ -3,6 +3,8 @@ package stream
 import (
 	"context"
 	"fmt"
+
+	"github.com/on-the-ground/effect_ive_go/effects/internal/orderedbuffer"
 )
 
 type streamEffectPayload interface {
@@ -47,6 +49,18 @@ type SubscribeStreamPayload[T any] struct {
 
 func (p SubscribeStreamPayload[T]) sealedStreamEffectPayload() {}
 func (p SubscribeStreamPayload[T]) PartitionKey() string {
+	return p.Source.String()
+}
+
+type OrderByStreamPayload[T any] struct {
+	WindowSize int
+	CmpFn      orderedbuffer.CompareFunc[T]
+	Source     SourceAsKey[T]
+	Sink       chan<- T
+}
+
+func (p OrderByStreamPayload[T]) sealedStreamEffectPayload() {}
+func (p OrderByStreamPayload[T]) PartitionKey() string {
 	return p.Source.String()
 }
 
