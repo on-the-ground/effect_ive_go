@@ -307,3 +307,77 @@ func TestStreamEffect_OrderByStreamPayload_SortsCorrectly(t *testing.T) {
 		t.Errorf("Expected sorted output %v, got %v", expected, results)
 	}
 }
+
+func TestStreamEffect_MergeStreamPayload_DoubleClose(t *testing.T) {
+	ctx := context.Background()
+	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	defer endOfLogHandler()
+
+	ctx, teardown := stream.WithStreamEffectHandler[int](ctx, 32)
+	defer teardown()
+
+	// Two source channels
+	source1 := make(chan int)
+	source2 := make(chan int)
+	// One shared sink channel
+	sink := make(chan int)
+
+	// Merge both sources into one sink by MergeStreamPayload
+	stream.StreamEffect[int](ctx, stream.MergeStreamPayload[int]{
+		Sources: []<-chan int{source1, source2},
+		Sink:    sink,
+	})
+
+	// Produce and close from both sources
+	go func() {
+		source1 <- 1
+		close(source1)
+	}()
+	go func() {
+		source2 <- 2
+		close(source2)
+	}()
+
+	var results []int
+	for v := range sink {
+		results = append(results, v)
+	}
+
+	assert.ElementsMatch(t, []int{1, 2}, results)
+}
+
+func TestStreamEffect_Arbit_LoadFailureContinuesWithoutPanic(t *testing.T) {
+	ctx := context.Background()
+	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	defer endOfLogHandler()
+
+	ctx, teardown := stream.WithStreamEffectHandler[int](ctx, 32)
+	defer teardown()
+
+	// 1. Prepare source without registering any sink
+	source := make(chan int)
+
+	// 2. Directly spawn arbit logic by subscribing, but we will close source before proper sink registration
+	stream.StreamEffect[int](ctx, stream.SubscribeStreamPayload[int]{
+		Source: source,
+		Sink:   nil, // intentionally nil to simulate "no sink"
+	})
+
+	// 3. Send a value into the source
+	ready := make(chan struct{})
+	go func() {
+		defer close(ready)
+		source <- 42
+		close(source)
+	}()
+
+	<-ready // ensure value has been sent and source closed
+
+	// 4. Wait for a short moment to allow arbit() to process
+	select {
+	case <-time.After(200 * time.Millisecond):
+		// Test passed: no panic, no deadlock
+	case <-ctx.Done():
+		t.Fatal("context cancelled unexpectedly")
+	}
+}
