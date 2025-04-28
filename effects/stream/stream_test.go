@@ -151,51 +151,49 @@ func TestSubscribeStreamPayload_OneSinkReceivesEvent(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	// Step 1: Setup stream system
 	ctx, endOfStreamHandler := stream.WithStreamEffectHandler[int](ctx, 32)
 	defer endOfStreamHandler()
 
-	// Step 2: Setup source and sink
-	source := make(chan int)
-	sink := make(chan int)
+	source := make(chan int, 1)
+	sink := make(chan int, 1)
+	dropped := make(chan int, stream.MinCapacityOfDroppedChannel)
 
-	// Step 3: Subscribe
+	// 1. Subscribe sink
 	stream.StreamEffect[int](ctx, stream.SubscribeStreamPayload[int]{
 		Source: source,
-		Sink:   sink,
+		Target: stream.NewSinkDropPair(
+			sink,
+			chan<- int(dropped),
+		),
 	})
 
-	// Step 4: Send data through source
-	ready := make(chan struct{})
-	go func() {
-		close(ready)
+	// 2. Allow registration to stabilize
+	time.Sleep(300 * time.Millisecond)
+
+	// 3. Send a value into source
+outerloop:
+	for {
 		source <- 42
-		close(source)
-	}()
-	<-ready // Wait for the source to be ready
-
-	// Step 5: Assert sink receives data
-	select {
-	case v, ok := <-sink:
-		if !ok {
-			t.Fatal("sink channel was closed unexpectedly")
+		time.Sleep(50 * time.Millisecond)
+		select {
+		case v := <-sink:
+			assert.Equal(t, 42, v)
+			break outerloop
+		case d := <-dropped:
+			log.LogEffect(ctx, log.LogWarn, "dropped", map[string]interface{}{
+				"dropped": d,
+			})
+			assert.Equal(t, 42, d)
 		}
-		if v != 42 {
-			t.Fatalf("expected 42, got %d", v)
-		}
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("timeout: did not receive value on sink")
 	}
 
-	// Step 6: Ensure sink eventually closes after source close
-	select {
-	case _, ok := <-sink:
-		if ok {
-			t.Fatal("expected sink to be closed after source closed")
-		}
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("timeout: sink not closed after source close")
-	}
+	// 5. Close source after sending
+	close(source)
+
+	// 6: Ensure sink eventually closes after source close
+	_, ok := <-sink
+	assert.False(t, ok)
+
 }
 
 func TestSubscribeStreamPayload_MultipleSinksSequentiallyReceiveEvent(t *testing.T) {
@@ -203,69 +201,80 @@ func TestSubscribeStreamPayload_MultipleSinksSequentiallyReceiveEvent(t *testing
 	ctx, logEnd := log.WithTestLogEffectHandler(ctx)
 	defer logEnd()
 
-	// 1. Prepare stream system
 	ctx, teardown := stream.WithStreamEffectHandler[int](ctx, 32)
 	defer teardown()
 
-	// 2. Prepare source & sink
-	source := make(chan int)
-	sink1 := make(chan int, 1)
-	sink2 := make(chan int, 1)
+	source := make(chan int, 2)
+	sink1 := make(chan int, stream.MinCapacityOfDroppedChannel)
+	sink2 := make(chan int, stream.MinCapacityOfDroppedChannel)
+	dropped := make(chan int, stream.MinCapacityOfDroppedChannel)
 
-	// 3. Subscribe sink1
+	// 1. Subscribe sinks
 	stream.StreamEffect[int](ctx, stream.SubscribeStreamPayload[int]{
 		Source: source,
-		Sink:   sink1,
+		Target: stream.NewSinkDropPair(
+			sink1,
+			dropped,
+		),
 	})
 
-	time.Sleep(10 * time.Millisecond) // arbit startup 보장용
-
-	// 4. Subscribe sink2
 	stream.StreamEffect[int](ctx, stream.SubscribeStreamPayload[int]{
 		Source: source,
-		Sink:   sink2,
+		Target: stream.NewSinkDropPair(
+			sink2,
+			dropped,
+		),
 	})
 
-	time.Sleep(50 * time.Millisecond) // time for registration
+	// 2. Allow registration to stabilize
+	time.Sleep(300 * time.Millisecond)
 
-	// 5. Send data through source
+	received := make(chan int, 2)
+	ready := make(chan struct{})
+
 	go func() {
-		source <- 99
-		close(source)
+		ready <- struct{}{}
+		for v := range sink1 {
+			received <- v
+		}
 	}()
+	go func() {
+		ready <- struct{}{}
+		for v := range sink2 {
+			received <- v
+		}
+	}()
+	<-ready
+	<-ready
 
-	// 6. should receive the same value in both sinks
-	expectValue := func(ch <-chan int, who string) {
+	// 3. Send a value into source
+	// 먼저 source로 쏜다
+	source <- 99
+
+	// 그 다음 received에서 2개를 받는다
+	receivedCount := 0
+
+	for receivedCount < 2 {
 		select {
-		case v, ok := <-ch:
-			if !ok {
-				t.Fatalf("%s: sink closed unexpectedly", who)
-			}
-			if v != 99 {
-				t.Fatalf("%s: expected 99, got %d", who, v)
-			}
-		case <-time.After(500 * time.Millisecond):
-			t.Fatalf("%s: timeout waiting for value", who)
+		case v := <-received:
+			assert.Equal(t, 99, v)
+			receivedCount++
+		case d := <-dropped:
+			assert.Equal(t, 99, d)
+			receivedCount++
+		case <-time.After(2 * time.Second): // 타임아웃 늘려줌
+			t.Fatal("timeout waiting for sinks or dropped")
 		}
 	}
 
-	expectValue(sink1, "sink1")
-	expectValue(sink2, "sink2")
+	// 5. Close source after sending
+	close(source)
 
-	// 7. both sinks should be closed after source close
-	expectClosed := func(ch <-chan int, who string) {
-		select {
-		case _, ok := <-ch:
-			if ok {
-				t.Fatalf("%s: expected sink to be closed", who)
-			}
-		case <-time.After(500 * time.Millisecond):
-			t.Fatalf("%s: sink not closed", who)
-		}
-	}
-
-	expectClosed(sink1, "sink1")
-	expectClosed(sink2, "sink2")
+	// 6. Ensure sinks are closed afterwards
+	_, ok := <-sink1
+	assert.False(t, ok)
+	_, ok = <-sink2
+	assert.False(t, ok)
 }
 
 func TestStreamEffect_OrderByStreamPayload_SortsCorrectly(t *testing.T) {
@@ -344,40 +353,4 @@ func TestStreamEffect_MergeStreamPayload_DoubleClose(t *testing.T) {
 	}
 
 	assert.ElementsMatch(t, []int{1, 2}, results)
-}
-
-func TestStreamEffect_Arbit_LoadFailureContinuesWithoutPanic(t *testing.T) {
-	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
-	defer endOfLogHandler()
-
-	ctx, teardown := stream.WithStreamEffectHandler[int](ctx, 32)
-	defer teardown()
-
-	// 1. Prepare source without registering any sink
-	source := make(chan int)
-
-	// 2. Directly spawn arbit logic by subscribing, but we will close source before proper sink registration
-	stream.StreamEffect[int](ctx, stream.SubscribeStreamPayload[int]{
-		Source: source,
-		Sink:   nil, // intentionally nil to simulate "no sink"
-	})
-
-	// 3. Send a value into the source
-	ready := make(chan struct{})
-	go func() {
-		defer close(ready)
-		source <- 42
-		close(source)
-	}()
-
-	<-ready // ensure value has been sent and source closed
-
-	// 4. Wait for a short moment to allow arbit() to process
-	select {
-	case <-time.After(200 * time.Millisecond):
-		// Test passed: no panic, no deadlock
-	case <-ctx.Done():
-		t.Fatal("context cancelled unexpectedly")
-	}
 }

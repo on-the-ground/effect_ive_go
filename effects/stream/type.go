@@ -3,6 +3,8 @@ package stream
 import (
 	"context"
 	"fmt"
+	"reflect"
+	"sync/atomic"
 
 	"github.com/on-the-ground/effect_ive_go/effects/internal/orderedbuffer"
 )
@@ -45,7 +47,7 @@ func (p MergeStreamPayload[T]) sealedStreamEffectPayload() {}
 
 type SubscribeStreamPayload[T any] struct {
 	Source SourceAsKey[T]
-	Sink   chan<- T
+	Target *sinkDropPair[T]
 }
 
 func (p SubscribeStreamPayload[T]) sealedStreamEffectPayload() {}
@@ -71,6 +73,36 @@ func (s SourceAsKey[T]) String() string {
 	return fmt.Sprintf("%p", s)
 }
 
-type SinkList[T any] struct {
-	List []chan<- T
+type sinkDropPair[T any] struct {
+	Sink    chan<- T
+	Dropped chan<- T
+	closed  atomic.Bool
+}
+
+var MinCapacityOfDroppedChannel = 1000
+
+func NewSinkDropPair[T any](sink chan<- T, dropped chan<- T) *sinkDropPair[T] {
+	if sink == nil || dropped == nil {
+		panic("nil channel not allowed for sink/dropped")
+	}
+	if channelCapacity(dropped) < MinCapacityOfDroppedChannel {
+		panic(fmt.Sprintf("dropped channl should have its capacity larger than %v", MinCapacityOfDroppedChannel))
+	}
+	return &sinkDropPair[T]{
+		Sink:    sink,
+		Dropped: dropped,
+		closed:  atomic.Bool{},
+	}
+}
+
+type RegisteredList[T any] struct {
+	Registered []*sinkDropPair[T]
+}
+
+func channelCapacity(ch interface{}) int {
+	val := reflect.ValueOf(ch)
+	if val.Kind() != reflect.Chan {
+		return -1
+	}
+	return val.Cap()
 }

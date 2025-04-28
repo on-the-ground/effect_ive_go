@@ -83,7 +83,7 @@ func (reg channelRegistry[T]) handleSubscriptionEffect(ctx context.Context, msg 
 	raw, ok := reg.Load(msg.Source.String())
 	firstSink = !ok
 	if firstSink {
-		reg.Store(msg.Source.String(), &SinkList[T]{List: []chan<- T{msg.Sink}})
+		reg.Store(msg.Source.String(), &RegisteredList[T]{Registered: []*sinkDropPair[T]{msg.Target}})
 		concurrency.ConcurrencyEffect(ctx, func(ctx context.Context) {
 			logger, _ := zap.NewProduction()
 			ctx, endOfLogHandler := log.WithZapLogEffectHandler(ctx, 10, logger)
@@ -101,7 +101,7 @@ func (reg channelRegistry[T]) handleSubscriptionEffect(ctx context.Context, msg 
 		return
 	}
 
-	oldSinks, ok := raw.(*SinkList[T])
+	oldSinks, ok := raw.(*RegisteredList[T])
 	if !ok {
 		log.LogEffect(ctx, log.LogError, "fail to cast sinks", map[string]interface{}{
 			"key": msg.Source,
@@ -114,7 +114,7 @@ func (reg channelRegistry[T]) handleSubscriptionEffect(ctx context.Context, msg 
 		if swapped := reg.CompareAndSwap(
 			msg.Source.String(),
 			oldSinks,
-			&SinkList[T]{List: append(oldSinks.List, msg.Sink)},
+			&RegisteredList[T]{Registered: append(oldSinks.Registered, msg.Target)},
 		); swapped {
 			// If the swap was successful, we can break out of the loop
 			return nil
@@ -142,28 +142,13 @@ func (reg channelRegistry[T]) handleSubscriptionEffect(ctx context.Context, msg 
 }
 
 func (reg *channelRegistry[T]) arbit(ctx context.Context, source SourceAsKey[T]) {
-	var sinks *SinkList[T]
-	defer func() {
-		if sinks == nil {
-			log.LogEffect(ctx, log.LogInfo, "sinks is nil; skipping cleanup", map[string]interface{}{"key": source})
-			return
-		}
-		for _, sink := range sinks.List {
-			// Close the sink channel
-			close(sink)
-		}
-		// Remove the sinks from the registry
-		if deleted := reg.CompareAndDelete(source.String(), sinks); !deleted {
-			log.LogEffect(ctx, log.LogError, "fail to unregister sinks", map[string]interface{}{
-				"key": source,
-			})
-		}
-	}()
+	var sinks *RegisteredList[T]
+
 	for v := range source {
 		var ok bool
 
 		// Intended to reload the sinks when the message is received
-		if sinks, ok = helper.GetTypedValueOf2[*SinkList[T]](func() (any, bool) {
+		if sinks, ok = helper.GetTypedValueOf2[*RegisteredList[T]](func() (any, bool) {
 			return reg.Load(source.String())
 		}); !ok {
 			log.LogEffect(ctx, log.LogError, "fail to cast sinks, dropped an message", map[string]interface{}{
@@ -173,18 +158,48 @@ func (reg *channelRegistry[T]) arbit(ctx context.Context, source SourceAsKey[T])
 		}
 
 		// Send the message to all sinks
-		for _, sink := range sinks.List {
-			select {
-			case sink <- v:
-			case <-ctx.Done():
-				return
-			default:
-				// If the sink is full, we can drop the message
-				log.LogEffect(ctx, log.LogError, "fail to send message to sink, dropped an message", map[string]interface{}{
-					"value": v,
-				})
+		for _, pair := range sinks.Registered {
+			sink := pair.Sink
+			dropped := pair.Dropped
+			if dropped == nil {
+				select {
+				case sink <- v:
+				case <-ctx.Done():
+					return
+				default:
+					log.LogEffect(ctx, log.LogError, "message dropped:", map[string]interface{}{
+						"dropped": v,
+					})
+				}
+			} else {
+				select {
+				case sink <- v:
+				case dropped <- v:
+				case <-ctx.Done():
+					return
+				default:
+					log.LogEffect(ctx, log.LogError, "message dropped:", map[string]interface{}{
+						"dropped": v,
+					})
+				}
 			}
 		}
+	}
+
+	if sinks != nil {
+		// Remove the sinks from the registry
+		if deleted := reg.CompareAndDelete(source.String(), sinks); deleted {
+			for _, chanPair := range sinks.Registered {
+				// Close the sink channel
+				close(chanPair.Sink)
+				close(chanPair.Dropped)
+			}
+		} else {
+			log.LogEffect(ctx, log.LogError, "fail to unregister sinks", map[string]interface{}{
+				"key": source,
+			})
+		}
+
 	}
 }
 
