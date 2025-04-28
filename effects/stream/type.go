@@ -22,6 +22,7 @@ type MapStreamPayload[T any, R any] struct {
 }
 
 func (m MapStreamPayload[T, R]) Run(ctx context.Context) {
+	defer close(m.Sink)
 	mapFn(ctx, m.Source, m.Sink, m.MapFn)
 }
 

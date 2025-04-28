@@ -35,6 +35,16 @@ func GetTypedValueOf[T any](getFn func() (any, error)) (T, error) {
 	return val, nil
 }
 
+// GetTypedValueOf2 safely asserts the result of a getter function to the expected type T.
+// Returns an error if type assertion fails.
+func GetTypedValueOf2[T any](getFn func() (any, bool)) (res T, ok bool) {
+	var raw any
+	if raw, ok = getFn(); ok {
+		res, ok = raw.(T)
+	}
+	return
+}
+
 // MustGetTypedValue is the panic-on-failure variant of getTypedValue.
 // Use when failure should be fatal (e.g., when effect handler is guaranteed to exist).
 func MustGetTypedValue[T any](getFn func() (any, error)) T {
