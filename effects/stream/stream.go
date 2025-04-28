@@ -45,11 +45,19 @@ func StreamEffect[T any](ctx context.Context, payload streamEffectPayload) {
 			filter(ctx, msg.Source, msg.Sink, msg.Predicate)
 		})
 	case MergeStreamPayload[T]:
+		localCtx, endOfWorkers := concurrency.WithConcurrencyEffectHandler(ctx, len(msg.Sources)*2)
+
 		for _, source := range msg.Sources {
-			concurrency.ConcurrencyEffect(ctx, func(ctx context.Context) {
+			concurrency.ConcurrencyEffect(localCtx, func(ctx context.Context) {
 				pipe(ctx, source, msg.Sink)
 			})
 		}
+
+		concurrency.ConcurrencyEffect(ctx, func(ctx context.Context) {
+			endOfWorkers()
+			close(msg.Sink)
+		})
+
 	case SubscribeStreamPayload[T]:
 		effects.FireAndForgetEffect(ctx, effectmodel.EffectStream, msg)
 
@@ -137,7 +145,7 @@ func (reg *channelRegistry[T]) arbit(ctx context.Context, source SourceAsKey[T])
 	var sinks *SinkList[T]
 	defer func() {
 		if sinks == nil {
-			log.LogEffect(ctx, log.LogError, "sinks is nil; skipping cleanup", map[string]interface{}{"key": source})
+			log.LogEffect(ctx, log.LogInfo, "sinks is nil; skipping cleanup", map[string]interface{}{"key": source})
 			return
 		}
 		for _, sink := range sinks.List {
@@ -152,15 +160,16 @@ func (reg *channelRegistry[T]) arbit(ctx context.Context, source SourceAsKey[T])
 		}
 	}()
 	for v := range source {
-		// Reload the sinks when the message is received
-		if raw, ok := reg.Load(source.String()); !ok {
-			log.LogEffect(ctx, log.LogError, "fail to load sinks, dropped an message", map[string]interface{}{
-				"value": v,
-			})
-		} else if sinks, ok = raw.(*SinkList[T]); !ok {
+		var ok bool
+
+		// Intended to reload the sinks when the message is received
+		if sinks, ok = helper.GetTypedValueOf2[*SinkList[T]](func() (any, bool) {
+			return reg.Load(source.String())
+		}); !ok {
 			log.LogEffect(ctx, log.LogError, "fail to cast sinks, dropped an message", map[string]interface{}{
 				"value": v,
 			})
+			continue
 		}
 
 		// Send the message to all sinks
@@ -180,7 +189,6 @@ func (reg *channelRegistry[T]) arbit(ctx context.Context, source SourceAsKey[T])
 }
 
 func mapFn[T any, R any](ctx context.Context, source <-chan T, sink chan<- R, f func(T) R) {
-	defer close(sink)
 	for v := range source {
 		select {
 		case sink <- f(v):
