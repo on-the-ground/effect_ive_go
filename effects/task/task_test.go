@@ -43,7 +43,7 @@ func TestTaskEffect_Cancelled(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	// 타임아웃을 주고, 바로 취소하지 않음
+	// Cancel after a little bit while.
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
 	defer cancel()
 
@@ -56,12 +56,12 @@ func TestTaskEffect_Cancelled(t *testing.T) {
 		select {
 		case <-ctx.Done():
 			return "", ctx.Err()
-		case <-time.After(200 * time.Millisecond): // 확실히 context보다 늦음
+		case <-time.After(200 * time.Millisecond): // Besure after the timeout expired
 			return "too late", nil
 		}
 	})
 
-	// 100ms 뒤에 unblock 하는 타이머 설정 (context는 50ms에 취소됨)
+	// Unblock after 100ms (timeout expired at 20ms)
 	go func() {
 		time.Sleep(100 * time.Millisecond)
 		close(block)
