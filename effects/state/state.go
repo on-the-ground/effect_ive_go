@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 
 	"github.com/on-the-ground/effect_ive_go/effects"
 	"github.com/on-the-ground/effect_ive_go/effects/concurrency"
@@ -90,17 +89,18 @@ func WithStateEffectHandler(
 	ctx context.Context,
 	config effectmodel.EffectScopeConfig,
 	delegation bool,
+	stateRepo StateRepo,
 	initMap map[string]any,
 ) (context.Context, func() context.Context) {
 	ctx, endOfConcurrency := concurrency.WithConcurrencyEffectHandler(ctx, config.BufferSize)
 	sink := make(chan TimeBoundedStatePayload, 2*config.NumWorkers)
 	stateHandler := &stateHandler{
-		stateMap:   &sync.Map{},
+		stateRepo:  stateRepo,
 		sink:       sink,
 		delegation: delegation,
 	}
 	for k, v := range initMap {
-		stateHandler.stateMap.Store(k, v)
+		stateHandler.stateRepo.Store(k, v)
 	}
 	return effects.WithResumablePartitionableEffectHandler(
 		ctx,
@@ -152,10 +152,17 @@ func delegateStateEffect(upperCtx context.Context, payload StatePayload) (res an
 	return StateEffect(upperCtx, payload)
 }
 
+type StateRepo interface {
+	Load(key any) (value any, ok bool)
+	Store(key, value any)
+	CompareAndSwap(key, old, new any) (swapped bool)
+	CompareAndDelete(key, old any) (deleted bool)
+}
+
 // stateHandler defines the in-memory state store logic.
 // It supports safe concurrent access and fallback to upstream handler if key is missing.
 type stateHandler struct {
-	stateMap   *sync.Map
+	stateRepo  StateRepo
 	sink       chan TimeBoundedStatePayload
 	delegation bool
 }
@@ -176,7 +183,7 @@ func (sH stateHandler) handle(ctx context.Context, payload StatePayload) (res an
 				res = res.(bool) || dres.(bool)
 			}()
 		}
-		if swapped := sH.stateMap.CompareAndSwap(payload.Key, payload.Old, payload.New); !swapped {
+		if swapped := sH.stateRepo.CompareAndSwap(payload.Key, payload.Old, payload.New); !swapped {
 			res = false
 			err = nil
 			return
@@ -202,7 +209,7 @@ func (sH stateHandler) handle(ctx context.Context, payload StatePayload) (res an
 				res = res.(bool) || dres.(bool)
 			}()
 		}
-		if deleted := sH.stateMap.CompareAndDelete(payload.Key, payload.Old); !deleted {
+		if deleted := sH.stateRepo.CompareAndDelete(payload.Key, payload.Old); !deleted {
 			res = false
 			err = nil
 			return
@@ -227,7 +234,7 @@ func (sH stateHandler) handle(ctx context.Context, payload StatePayload) (res an
 				delegateStateEffect(ctx, payload)
 			}()
 		}
-		sH.stateMap.Store(payload.Key, payload.New)
+		sH.stateRepo.Store(payload.Key, payload.New)
 		payloadWithTimeSpan := statePayloadWithNow(payload)
 		concurrency.ConcurrencyEffect(ctx, func(ctx context.Context) {
 			select {
@@ -239,7 +246,7 @@ func (sH stateHandler) handle(ctx context.Context, payload StatePayload) (res an
 		return nil, nil
 
 	case LoadStatePayload:
-		v, ok := sH.stateMap.Load(payload.Key)
+		v, ok := sH.stateRepo.Load(payload.Key)
 		if ok {
 			return v, nil
 		}
