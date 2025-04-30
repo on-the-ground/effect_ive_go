@@ -26,6 +26,7 @@ func TestStateEffect_BasicLookup(t *testing.T) {
 		ctx,
 		effectmodel.NewEffectScopeConfig(1, 1),
 		false,
+		&sync.Map{},
 		map[string]any{
 			"foo": 123,
 		},
@@ -49,6 +50,7 @@ func TestStateEffect_KeyNotFound(t *testing.T) {
 		ctx,
 		effectmodel.NewEffectScopeConfig(1, 1),
 		false,
+		&sync.Map{},
 		map[string]any{
 			"foo": 123,
 		},
@@ -71,6 +73,7 @@ func TestStateEffect_DelegatesToUpperScope(t *testing.T) {
 		ctx,
 		effectmodel.NewEffectScopeConfig(1, 1),
 		false,
+		&sync.Map{},
 		map[string]any{
 			"upper": "delegated",
 		},
@@ -82,6 +85,7 @@ func TestStateEffect_DelegatesToUpperScope(t *testing.T) {
 		lowerCtx,
 		effectmodel.NewEffectScopeConfig(1, 1),
 		true,
+		&sync.Map{},
 		nil,
 	)
 	defer lowerClose()
@@ -109,7 +113,13 @@ func TestStateEffect_ConcurrentPartitionedAccess(t *testing.T) {
 	}
 
 	// register the state handler with partitioning
-	ctx, cancel := state.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(10, 10), false, states)
+	ctx, cancel := state.WithStateEffectHandler(
+		ctx,
+		effectmodel.NewEffectScopeConfig(10, 10),
+		false,
+		&sync.Map{},
+		states,
+	)
 	defer cancel()
 
 	var (
@@ -169,9 +179,14 @@ func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, cancel := state.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(8, 8), false, map[string]any{
-		"x": "init",
-	})
+	ctx, cancel := state.WithStateEffectHandler(
+		ctx,
+		effectmodel.NewEffectScopeConfig(8, 8),
+		false,
+		&sync.Map{},
+		map[string]any{
+			"x": "init",
+		})
 	defer cancel()
 
 	var wg sync.WaitGroup
@@ -231,7 +246,13 @@ func TestStateEffect_ContextTimeout(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, cancel := state.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(1, 1), false, nil)
+	ctx, cancel := state.WithStateEffectHandler(
+		ctx,
+		effectmodel.NewEffectScopeConfig(1, 1),
+		false,
+		&sync.Map{},
+		nil,
+	)
 	defer cancel()
 
 	// simulate handler blocking by using a long operation in a goroutine (deliberately omitted)
@@ -256,7 +277,13 @@ func TestStateEffect_SetAndGet(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, cancel := state.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(1, 1), false, nil)
+	ctx, cancel := state.WithStateEffectHandler(
+		ctx,
+		effectmodel.NewEffectScopeConfig(1, 1),
+		false,
+		&sync.Map{},
+		nil,
+	)
 	defer cancel()
 
 	old, _ := state.StateEffect(ctx, state.LoadStatePayload{Key: "foo"})
@@ -279,7 +306,13 @@ func TestStateEffect_SourcePayloadReturnsSink(t *testing.T) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	ctx, end := state.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(8, 8), false, nil)
+	ctx, end := state.WithStateEffectHandler(
+		ctx,
+		effectmodel.NewEffectScopeConfig(8, 8),
+		false,
+		&sync.Map{},
+		nil,
+	)
 	defer end()
 
 	// 1. Get sink channel from SourceStatePayload
@@ -335,15 +368,33 @@ func TestStore_Delegation(t *testing.T) {
 	defer endOfLogHandler()
 
 	// Tier 2 - has key x=1
-	ctx2, endOfTier2 := state.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(2, 2), false, map[string]any{})
+	ctx2, endOfTier2 := state.WithStateEffectHandler(
+		ctx,
+		effectmodel.NewEffectScopeConfig(2, 2),
+		false,
+		&sync.Map{},
+		map[string]any{},
+	)
 	defer endOfTier2()
 
 	// Tier 1 - has key x=1
-	ctx1, endOfTier1 := state.WithStateEffectHandler(ctx2, effectmodel.NewEffectScopeConfig(2, 2), false, map[string]any{})
+	ctx1, endOfTier1 := state.WithStateEffectHandler(
+		ctx2,
+		effectmodel.NewEffectScopeConfig(2, 2),
+		false,
+		&sync.Map{},
+		map[string]any{},
+	)
 	defer endOfTier1()
 
 	// Tier 0 - has key x=1
-	ctx0, endOfTier0 := state.WithStateEffectHandler(ctx1, effectmodel.NewEffectScopeConfig(2, 2), true, map[string]any{})
+	ctx0, endOfTier0 := state.WithStateEffectHandler(
+		ctx1,
+		effectmodel.NewEffectScopeConfig(2, 2),
+		true,
+		&sync.Map{},
+		map[string]any{},
+	)
 	defer endOfTier0()
 
 	// Store should succeed in tier 0
@@ -380,21 +431,39 @@ func TestCompareAndSwap_Delegation(t *testing.T) {
 	defer endOfLogHandler()
 
 	// Tier 2 - has key x=1
-	ctx2, endOfTier2 := state.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(2, 2), false, map[string]any{
-		"x": 1,
-	})
+	ctx2, endOfTier2 := state.WithStateEffectHandler(
+		ctx,
+		effectmodel.NewEffectScopeConfig(2, 2),
+		false,
+		&sync.Map{},
+		map[string]any{
+			"x": 1,
+		},
+	)
 	defer endOfTier2()
 
 	// Tier 1 - has key x=1
-	ctx1, endOfTier1 := state.WithStateEffectHandler(ctx2, effectmodel.NewEffectScopeConfig(2, 2), false, map[string]any{
-		"x": 1,
-	})
+	ctx1, endOfTier1 := state.WithStateEffectHandler(
+		ctx2,
+		effectmodel.NewEffectScopeConfig(2, 2),
+		false,
+		&sync.Map{},
+		map[string]any{
+			"x": 1,
+		},
+	)
 	defer endOfTier1()
 
 	// Tier 0 - has key x=1
-	ctx0, endOfTier0 := state.WithStateEffectHandler(ctx1, effectmodel.NewEffectScopeConfig(2, 2), true, map[string]any{
-		"x": 1,
-	})
+	ctx0, endOfTier0 := state.WithStateEffectHandler(
+		ctx1,
+		effectmodel.NewEffectScopeConfig(2, 2),
+		true,
+		&sync.Map{},
+		map[string]any{
+			"x": 1,
+		},
+	)
 	defer endOfTier0()
 
 	// CAS should succeed in tier 0
@@ -434,21 +503,39 @@ func TestCompareAndDelete_Delegation(t *testing.T) {
 	defer endOfLogHandler()
 
 	// Tier 2 - has key y=99
-	ctx2, endOfTier2 := state.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(2, 2), false, map[string]any{
-		"y": 98,
-	})
+	ctx2, endOfTier2 := state.WithStateEffectHandler(
+		ctx,
+		effectmodel.NewEffectScopeConfig(2, 2),
+		false,
+		&sync.Map{},
+		map[string]any{
+			"y": 98,
+		},
+	)
 	defer endOfTier2()
 
 	// Tier 1 - has key y=99
-	ctx1, endOfTier1 := state.WithStateEffectHandler(ctx2, effectmodel.NewEffectScopeConfig(2, 2), false, map[string]any{
-		"y": 99,
-	})
+	ctx1, endOfTier1 := state.WithStateEffectHandler(
+		ctx2,
+		effectmodel.NewEffectScopeConfig(2, 2),
+		false,
+		&sync.Map{},
+		map[string]any{
+			"y": 99,
+		},
+	)
 	defer endOfTier1()
 
 	// Tier 0 - has key y=99
-	ctx0, endOfTier0 := state.WithStateEffectHandler(ctx1, effectmodel.NewEffectScopeConfig(2, 2), true, map[string]any{
-		"y": 99,
-	})
+	ctx0, endOfTier0 := state.WithStateEffectHandler(
+		ctx1,
+		effectmodel.NewEffectScopeConfig(2, 2),
+		true,
+		&sync.Map{},
+		map[string]any{
+			"y": 99,
+		},
+	)
 	defer endOfTier0()
 
 	// CAD should succeed in tier 0
