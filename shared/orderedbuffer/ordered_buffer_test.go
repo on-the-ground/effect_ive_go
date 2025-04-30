@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/on-the-ground/effect_ive_go/effects/internal/orderedbuffer"
+	"github.com/on-the-ground/effect_ive_go/shared/orderedbuffer"
 	"github.com/stretchr/testify/assert"
 )
 
