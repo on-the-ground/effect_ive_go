@@ -1,4 +1,4 @@
-package pure
+package purefn
 
 func TableizeI1O2[I1 ComparableOrStringer, O1, O2 any](
 	pureFn func(I1) (O1, O2),
