@@ -328,3 +328,107 @@ func TestStateEffect_SourcePayloadReturnsSink(t *testing.T) {
 		t.Fatal("expected payload not received on sink channel")
 	}
 }
+
+func TestCompareAndSwap_Delegation(t *testing.T) {
+	ctx := context.Background()
+	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	defer endOfLogHandler()
+
+	// Tier 2 - has key x=1
+	ctx2, endOfTier2 := state.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(2, 2), false, map[string]any{
+		"x": 1,
+	})
+	defer endOfTier2()
+
+	// Tier 1 - has key x=1
+	ctx1, endOfTier1 := state.WithStateEffectHandler(ctx2, effectmodel.NewEffectScopeConfig(2, 2), false, map[string]any{
+		"x": 1,
+	})
+	defer endOfTier1()
+
+	// Tier 0 - has key x=1
+	ctx0, endOfTier0 := state.WithStateEffectHandler(ctx1, effectmodel.NewEffectScopeConfig(2, 2), true, map[string]any{
+		"x": 1,
+	})
+	defer endOfTier0()
+
+	// CAS should succeed in tier 0
+	ok, err := state.StateEffect(ctx0, state.CompareAndSwapStatePayload{
+		Key: "x",
+		Old: 1,
+		New: 2,
+	})
+	assert.NoError(t, err, "CAS delegation failed")
+	assert.True(t, ok.(bool), "CAS delegation returned false, expected true")
+
+	// Confirm that new value is set
+	val, err := state.StateEffect(ctx0, state.LoadStatePayload{
+		Key: "x",
+	})
+	assert.NoError(t, err, "Load failed")
+	assert.Equal(t, val.(int), 2, "Expected x=2")
+
+	// Confirm that new value is set
+	val, err = state.StateEffect(ctx1, state.LoadStatePayload{
+		Key: "x",
+	})
+	assert.NoError(t, err, "Load failed")
+	assert.Equal(t, val.(int), 2, "Expected x=2")
+
+	// Confirm that prev value is set
+	val, err = state.StateEffect(ctx2, state.LoadStatePayload{
+		Key: "x",
+	})
+	assert.NoError(t, err, "Load failed")
+	assert.Equal(t, val.(int), 1, "Expected x=1")
+}
+
+func TestCompareAndDelete_Delegation(t *testing.T) {
+	ctx := context.Background()
+	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	defer endOfLogHandler()
+
+	// Tier 2 - has key y=99
+	ctx2, endOfTier2 := state.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(2, 2), false, map[string]any{
+		"y": 99,
+	})
+	defer endOfTier2()
+
+	// Tier 1 - has key y=99
+	ctx1, endOfTier1 := state.WithStateEffectHandler(ctx2, effectmodel.NewEffectScopeConfig(2, 2), false, map[string]any{
+		"y": 99,
+	})
+	defer endOfTier1()
+
+	// Tier 0 - has key y=99
+	ctx0, endOfTier0 := state.WithStateEffectHandler(ctx1, effectmodel.NewEffectScopeConfig(2, 2), true, map[string]any{
+		"y": 99,
+	})
+	defer endOfTier0()
+
+	// CAD should succeed in tier 0
+	ok, err := state.StateEffect(ctx0, state.CompareAndDeleteStatePayload{
+		Key: "y",
+		Old: 99,
+	})
+	assert.NoError(t, err, "CAD delegation failed")
+	assert.True(t, ok.(bool), "CAD delegation returned false, expected true")
+
+	// Confirm deletion
+	_, err = state.StateEffect(ctx0, state.LoadStatePayload{
+		Key: "y",
+	})
+	assert.ErrorIs(t, err, state.ErrNoSuchKey)
+
+	_, err = state.StateEffect(ctx1, state.LoadStatePayload{
+		Key: "y",
+	})
+	assert.ErrorIs(t, err, state.ErrNoSuchKey)
+
+	// Confirm that prev value is set
+	val, err := state.StateEffect(ctx2, state.LoadStatePayload{
+		Key: "y",
+	})
+	assert.NoError(t, err, "Load failed")
+	assert.Equal(t, val.(int), 99, "Expected y=99")
+}

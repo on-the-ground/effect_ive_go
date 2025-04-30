@@ -161,15 +161,25 @@ type stateHandler struct {
 }
 
 // handle routes the given payload to the appropriate state operation logic.
-func (sH stateHandler) handle(ctx context.Context, payload StatePayload) (any, error) {
+func (sH stateHandler) handle(ctx context.Context, payload StatePayload) (res any, err error) {
 	switch payload := payload.(type) {
 
 	case CompareAndSwapStatePayload:
 		if payload.Old == payload.New {
-			return true, nil
+			res = true
+			err = nil
+			return
+		}
+		if sH.delegation {
+			defer func() {
+				dres, _ := delegateStateEffect(ctx, payload)
+				res = res.(bool) || dres.(bool)
+			}()
 		}
 		if swapped := sH.stateMap.CompareAndSwap(payload.Key, payload.Old, payload.New); !swapped {
-			return false, nil
+			res = false
+			err = nil
+			return
 		}
 		payloadWithTimeSpan := statePayloadWithNow(payload)
 
@@ -181,11 +191,21 @@ func (sH stateHandler) handle(ctx context.Context, payload StatePayload) (any, e
 			}
 		})
 
-		return true, nil
+		res = true
+		err = nil
+		return
 
 	case CompareAndDeleteStatePayload:
+		if sH.delegation {
+			defer func() {
+				dres, _ := delegateStateEffect(ctx, payload)
+				res = res.(bool) || dres.(bool)
+			}()
+		}
 		if deleted := sH.stateMap.CompareAndDelete(payload.Key, payload.Old); !deleted {
-			return false, nil
+			res = false
+			err = nil
+			return
 		}
 		payloadWithTimeSpan := statePayloadWithNow(payload)
 
@@ -197,7 +217,9 @@ func (sH stateHandler) handle(ctx context.Context, payload StatePayload) (any, e
 			}
 		})
 
-		return nil, nil
+		res = true
+		err = nil
+		return
 
 	case LoadStatePayload:
 		v, ok := sH.stateMap.Load(payload.Key)
