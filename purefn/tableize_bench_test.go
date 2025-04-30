@@ -1,10 +1,10 @@
-package pure_test
+package purefn_test
 
 import (
 	"fmt"
 	"testing"
 
-	"github.com/on-the-ground/effect_ive_go/pure"
+	"github.com/on-the-ground/effect_ive_go/purefn"
 )
 
 func naiveFib(n int) int {
@@ -22,7 +22,7 @@ func BenchmarkNaiveFib20(b *testing.B) {
 
 func BenchmarkTableizedFib20(b *testing.B) {
 	var tableFib func(int) int
-	tableFib = pure.TableizeI1O1(func(n int) int {
+	tableFib = purefn.TableizeI1O1(func(n int) int {
 		if n <= 1 {
 			return n
 		}
@@ -75,7 +75,7 @@ func BenchmarkTableizedLevenshtein(b *testing.B) {
 	for _, size := range sizes {
 		b.Run(fmt.Sprintf("TrieSize_%d", size), func(b *testing.B) {
 			var lev func(string, string) int
-			lev = pure.TableizeI2O1(func(a, b string) int {
+			lev = purefn.TableizeI2O1(func(a, b string) int {
 				if len(a) == 0 {
 					return len(b)
 				}
@@ -120,7 +120,7 @@ func BenchmarkNaiveDist(b *testing.B) {
 
 func BenchmarkTableizedDist(b *testing.B) {
 	var dist func(Point, Point) float64
-	dist = pure.TableizeI2O1(func(p1, p2 Point) float64 {
+	dist = purefn.TableizeI2O1(func(p1, p2 Point) float64 {
 		dx := p1.X - p2.X
 		dy := p1.Y - p2.Y
 		return dx*dx + dy*dy

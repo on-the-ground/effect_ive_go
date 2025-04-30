@@ -1,17 +1,17 @@
-package pure_test
+package purefn_test
 
 import (
 	"fmt"
 	"testing"
 
-	"github.com/on-the-ground/effect_ive_go/pure"
+	"github.com/on-the-ground/effect_ive_go/purefn"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestTableizeI1O1(t *testing.T) {
 	count := 0
-	fn := pure.TableizeI1O1(func(i int) int {
+	fn := purefn.TableizeI1O1(func(i int) int {
 		count++
 		return i * 2
 	}, 2)
@@ -23,7 +23,7 @@ func TestTableizeI1O1(t *testing.T) {
 
 func TestTableizeI2O1(t *testing.T) {
 	count := 0
-	fn := pure.TableizeI2O1(func(a, b int) int {
+	fn := purefn.TableizeI2O1(func(a, b int) int {
 		count++
 		return a + b
 	}, 2)
@@ -35,7 +35,7 @@ func TestTableizeI2O1(t *testing.T) {
 
 func TestTableizeI3O1(t *testing.T) {
 	count := 0
-	fn := pure.TableizeI3O1(func(a, b, c int) int {
+	fn := purefn.TableizeI3O1(func(a, b, c int) int {
 		count++
 		return a * b * c
 	}, 2)
@@ -47,7 +47,7 @@ func TestTableizeI3O1(t *testing.T) {
 
 func TestTableizeI4O1(t *testing.T) {
 	count := 0
-	fn := pure.TableizeI4O1(func(a, b, c, d int) int {
+	fn := purefn.TableizeI4O1(func(a, b, c, d int) int {
 		count++
 		return a + b + c + d
 	}, 2)
@@ -59,7 +59,7 @@ func TestTableizeI4O1(t *testing.T) {
 
 func TestTableizeI1O2(t *testing.T) {
 	count := 0
-	fn := pure.TableizeI1O2(func(i int) (int, string) {
+	fn := purefn.TableizeI1O2(func(i int) (int, string) {
 		count++
 		return i, "val"
 	}, 2)
@@ -75,7 +75,7 @@ func TestTableizeI1O2(t *testing.T) {
 
 func TestTableizeI2O2(t *testing.T) {
 	count := 0
-	fn := pure.TableizeI2O2(func(a, b int) (int, string) {
+	fn := purefn.TableizeI2O2(func(a, b int) (int, string) {
 		count++
 		return a * b, "mul"
 	}, 2)
@@ -89,7 +89,7 @@ func TestTableizeI2O2(t *testing.T) {
 
 func TestTableizeI3O2(t *testing.T) {
 	count := 0
-	fn := pure.TableizeI3O2(func(a, b, c int) (int, string) {
+	fn := purefn.TableizeI3O2(func(a, b, c int) (int, string) {
 		count++
 		return a + b + c, "sum"
 	}, 2)
@@ -103,7 +103,7 @@ func TestTableizeI3O2(t *testing.T) {
 
 func TestTableizeI4O2(t *testing.T) {
 	count := 0
-	fn := pure.TableizeI4O2(func(a, b, c, d int) (int, string) {
+	fn := purefn.TableizeI4O2(func(a, b, c, d int) (int, string) {
 		count++
 		return a * b * c * d, "product"
 	}, 2)
@@ -125,7 +125,7 @@ func (n NonComparable) String() string {
 
 func TestTableizeWithStringerFallback(t *testing.T) {
 	count := 0
-	fn := pure.TableizeI1O1(func(n NonComparable) int {
+	fn := purefn.TableizeI1O1(func(n NonComparable) int {
 		count++
 		return len(n.Field)
 	}, 2)
@@ -148,7 +148,7 @@ func TestTableizeWithPanicIfNoComparableOrStringer(t *testing.T) {
 			t.Errorf("expected panic due to missing Stringer and non-comparable type")
 		}
 	}()
-	fn := pure.TableizeI1O1(func(t TotallyInvalid) int {
+	fn := purefn.TableizeI1O1(func(t TotallyInvalid) int {
 		return len(t.Field)
 	}, 2)
 

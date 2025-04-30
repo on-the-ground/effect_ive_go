@@ -1,4 +1,4 @@
-// Package pure provides high-level memoization utilities for pure functions.
+// Package purefn provides high-level memoization utilities for pure functions.
 //
 // Tableize is not just a utility to add memoization.
 // Tableize is a tool that *forces the developer to ask*:
@@ -26,4 +26,4 @@
 // See tableize_test.go and tableize_bench_test.go for usage and benchmarks.
 //
 // WARNING: Do not use Tableize on impure functions (e.g., those depending on time, I/O, etc).
-package pure
+package purefn
