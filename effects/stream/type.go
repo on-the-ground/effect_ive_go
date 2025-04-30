@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"sync/atomic"
 
-	"github.com/on-the-ground/effect_ive_go/effects/internal/orderedbuffer"
+	"github.com/on-the-ground/effect_ive_go/shared/orderedbuffer"
 )
 
 type streamEffectPayload interface {
