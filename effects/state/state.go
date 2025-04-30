@@ -89,13 +89,15 @@ type StatePayload interface {
 func WithStateEffectHandler(
 	ctx context.Context,
 	config effectmodel.EffectScopeConfig,
+	delegation bool,
 	initMap map[string]any,
 ) (context.Context, func() context.Context) {
 	ctx, endOfConcurrency := concurrency.WithConcurrencyEffectHandler(ctx, config.BufferSize)
 	sink := make(chan TimeBoundedStatePayload, 2*config.NumWorkers)
 	stateHandler := &stateHandler{
-		stateMap: &sync.Map{},
-		sink:     sink,
+		stateMap:   &sync.Map{},
+		sink:       sink,
+		delegation: delegation,
 	}
 	for k, v := range initMap {
 		stateHandler.stateMap.Store(k, v)
@@ -128,8 +130,8 @@ func StateEffect(ctx context.Context, payload StatePayload) (val any, err error)
 	return
 }
 
-// ErrKeyNotFound is an error indicating that the key was not found in any state handlers.
-var ErrKeyNotFound = fmt.Errorf("key not found")
+// ErrNoSuchKey is an error indicating that the key was not found in any state handlers.
+var ErrNoSuchKey = fmt.Errorf("key not found")
 
 // delegateStateEffect is an internal helper for performing the state effect directly.
 func delegateStateEffect(upperCtx context.Context, payload StatePayload) (res any, err error) {
@@ -139,7 +141,7 @@ func delegateStateEffect(upperCtx context.Context, payload StatePayload) (res an
 				// Handle panic and return a nil value with an error
 				// indicating that the effect handler is not available to delegate.
 				res = nil
-				err = ErrKeyNotFound
+				err = r
 			} else {
 				panic(r) // re-raise the panic if it's not the expected error
 			}
@@ -153,8 +155,9 @@ func delegateStateEffect(upperCtx context.Context, payload StatePayload) (res an
 // stateHandler defines the in-memory state store logic.
 // It supports safe concurrent access and fallback to upstream handler if key is missing.
 type stateHandler struct {
-	stateMap *sync.Map
-	sink     chan TimeBoundedStatePayload
+	stateMap   *sync.Map
+	sink       chan TimeBoundedStatePayload
+	delegation bool
 }
 
 // handle routes the given payload to the appropriate state operation logic.
@@ -199,7 +202,14 @@ func (sH stateHandler) handle(ctx context.Context, payload StatePayload) (any, e
 	case LoadStatePayload:
 		v, ok := sH.stateMap.Load(payload.Key)
 		if !ok {
-			return delegateStateEffect(ctx, payload)
+			if !sH.delegation {
+				return nil, ErrNoSuchKey
+			}
+			if v, err := delegateStateEffect(ctx, payload); err != nil {
+				return nil, ErrNoSuchKey
+			} else {
+				return v, nil
+			}
 		} else {
 			return v, nil
 		}
