@@ -221,22 +221,12 @@ func (sH stateHandler) handle(ctx context.Context, payload StatePayload) (res an
 		err = nil
 		return
 
-	case LoadStatePayload:
-		v, ok := sH.stateMap.Load(payload.Key)
-		if !ok {
-			if !sH.delegation {
-				return nil, ErrNoSuchKey
-			}
-			if v, err := delegateStateEffect(ctx, payload); err != nil {
-				return nil, ErrNoSuchKey
-			} else {
-				return v, nil
-			}
-		} else {
-			return v, nil
-		}
-
 	case StoreStatePayload:
+		if sH.delegation {
+			defer func() {
+				delegateStateEffect(ctx, payload)
+			}()
+		}
 		sH.stateMap.Store(payload.Key, payload.New)
 		payloadWithTimeSpan := statePayloadWithNow(payload)
 		concurrency.ConcurrencyEffect(ctx, func(ctx context.Context) {
@@ -247,6 +237,17 @@ func (sH stateHandler) handle(ctx context.Context, payload StatePayload) (res an
 			}
 		})
 		return nil, nil
+
+	case LoadStatePayload:
+		v, ok := sH.stateMap.Load(payload.Key)
+		if ok {
+			return v, nil
+		}
+		if v, err := delegateStateEffect(ctx, payload); err != nil {
+			return nil, ErrNoSuchKey
+		} else {
+			return v, nil
+		}
 
 	case SourceStatePayload:
 		return sH.sink, nil
