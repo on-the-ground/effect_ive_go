@@ -25,6 +25,7 @@ func TestStateEffect_BasicLookup(t *testing.T) {
 	ctx, closeFn := state.WithStateEffectHandler(
 		ctx,
 		effectmodel.NewEffectScopeConfig(1, 1),
+		false,
 		map[string]any{
 			"foo": 123,
 		},
@@ -47,6 +48,7 @@ func TestStateEffect_KeyNotFound(t *testing.T) {
 	ctx, closeFn := state.WithStateEffectHandler(
 		ctx,
 		effectmodel.NewEffectScopeConfig(1, 1),
+		false,
 		map[string]any{
 			"foo": 123,
 		},
@@ -68,6 +70,7 @@ func TestStateEffect_DelegatesToUpperScope(t *testing.T) {
 	upperCtx, upperClose := state.WithStateEffectHandler(
 		ctx,
 		effectmodel.NewEffectScopeConfig(1, 1),
+		false,
 		map[string]any{
 			"upper": "delegated",
 		},
@@ -78,6 +81,7 @@ func TestStateEffect_DelegatesToUpperScope(t *testing.T) {
 	lowerCtx, lowerClose := state.WithStateEffectHandler(
 		lowerCtx,
 		effectmodel.NewEffectScopeConfig(1, 1),
+		true,
 		nil,
 	)
 	defer lowerClose()
@@ -105,7 +109,7 @@ func TestStateEffect_ConcurrentPartitionedAccess(t *testing.T) {
 	}
 
 	// register the state handler with partitioning
-	ctx, cancel := state.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(10, 10), states)
+	ctx, cancel := state.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(10, 10), false, states)
 	defer cancel()
 
 	var (
@@ -165,7 +169,7 @@ func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, cancel := state.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(8, 8), map[string]any{
+	ctx, cancel := state.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(8, 8), false, map[string]any{
 		"x": "init",
 	})
 	defer cancel()
@@ -227,7 +231,7 @@ func TestStateEffect_ContextTimeout(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, cancel := state.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(1, 1), nil)
+	ctx, cancel := state.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(1, 1), false, nil)
 	defer cancel()
 
 	// simulate handler blocking by using a long operation in a goroutine (deliberately omitted)
@@ -252,7 +256,7 @@ func TestStateEffect_SetAndGet(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, cancel := state.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(1, 1), nil)
+	ctx, cancel := state.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(1, 1), false, nil)
 	defer cancel()
 
 	old, _ := state.StateEffect(ctx, state.LoadStatePayload{Key: "foo"})
@@ -275,7 +279,7 @@ func TestStateEffect_SourcePayloadReturnsSink(t *testing.T) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	ctx, end := state.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(8, 8), nil)
+	ctx, end := state.WithStateEffectHandler(ctx, effectmodel.NewEffectScopeConfig(8, 8), false, nil)
 	defer end()
 
 	// 1. Get sink channel from SourceStatePayload
