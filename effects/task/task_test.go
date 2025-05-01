@@ -19,7 +19,7 @@ func TestTaskEffect_Success(t *testing.T) {
 	ctx, endOfTaskHandler := task.WithTaskEffectHandler[string](ctx, 1)
 	defer endOfTaskHandler()
 
-	ch := task.TaskEffect(ctx, func(ctx context.Context) (string, error) {
+	ch := task.TaskEff(ctx, func(ctx context.Context) (string, error) {
 		time.Sleep(50 * time.Millisecond)
 		return "ok", nil
 	})
@@ -52,7 +52,7 @@ func TestTaskEffect_Cancelled(t *testing.T) {
 
 	block := make(chan struct{})
 
-	ch := task.TaskEffect(ctx, func(ctx context.Context) (string, error) {
+	ch := task.TaskEff(ctx, func(ctx context.Context) (string, error) {
 		select {
 		case <-ctx.Done():
 			return "", ctx.Err()
@@ -88,7 +88,7 @@ func TestTaskEffect_Parallel(t *testing.T) {
 	var results = make([]<-chan handlers.ResumableResult[int], 0)
 	for i := 0; i < 5; i++ {
 		n := i
-		ch := task.TaskEffect(ctx, func(ctx context.Context) (int, error) {
+		ch := task.TaskEff(ctx, func(ctx context.Context) (int, error) {
 			time.Sleep(time.Duration(10+n*10) * time.Millisecond)
 			return n * 2, nil
 		})

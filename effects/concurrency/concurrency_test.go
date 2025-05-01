@@ -37,7 +37,7 @@ func TestConcurrencyEffect_AllChildrenRunAndComplete(t *testing.T) {
 		}
 	}
 
-	concurrency.ConcurrencyEffect(ctx, f(1), f(2), f(3))
+	concurrency.ConcurrencyEff(ctx, f(1), f(2), f(3))
 
 	wg.Wait()
 
@@ -61,7 +61,7 @@ func TestConcurrencyEffect_ContextCancelPropagatesToChildren(t *testing.T) {
 	blocked := make(chan struct{})
 	unblocked := make(chan struct{})
 
-	concurrency.ConcurrencyEffect(ctx,
+	concurrency.ConcurrencyEff(ctx,
 		func(ctx context.Context) {
 			blocked <- struct{}{}
 			<-ctx.Done()
@@ -89,7 +89,7 @@ func TestConcurrencyEffect_HandlesPanicsGracefully(t *testing.T) {
 	defer endOfConcurrencyHandler()
 
 	done := make(chan struct{})
-	concurrency.ConcurrencyEffect(ctx,
+	concurrency.ConcurrencyEff(ctx,
 		func(ctx context.Context) {
 			panic("child boom")
 		},
@@ -123,7 +123,7 @@ func TestConcurrencyEffect_WaitsUntilAllChildrenFinish(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	wg.Add(numGoroutines)
-	concurrency.ConcurrencyEffect(ctx,
+	concurrency.ConcurrencyEff(ctx,
 		sleep100msAndDone,
 		sleep100msAndDone,
 		sleep100msAndDone,
@@ -166,11 +166,11 @@ func TestConcurrencyEffect_SpawnsAndCleansUpAll(t *testing.T) {
 	}
 
 	// Spawn
-	concurrency.ConcurrencyEffect(ctx,
+	concurrency.ConcurrencyEff(ctx,
 		record("A1"),
 		record("A2"),
 	)
-	concurrency.ConcurrencyEffect(ctx,
+	concurrency.ConcurrencyEff(ctx,
 		record("B1"),
 		record("B2"),
 	)
@@ -186,7 +186,7 @@ func TestConcurrencyEffect_SpawnsAndCleansUpAll(t *testing.T) {
 	for i := 0; i < 4; i++ {
 		select {
 		case name := <-done:
-			log.LogEffect(ctx, log.LogInfo, "collected name", map[string]interface{}{
+			log.LogEff(ctx, log.LogInfo, "collected name", map[string]interface{}{
 				"name": name,
 			})
 			results = append(results, name)

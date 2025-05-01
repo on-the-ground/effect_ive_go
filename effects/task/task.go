@@ -67,6 +67,6 @@ func WithTaskEffectHandler[R any](
 }
 
 // TaskEffect performs an asynchronous task and returns a channel with the result.
-func TaskEffect[R any](ctx context.Context, payload TaskPayload[R]) <-chan handlers.ResumableResult[R] {
+func TaskEff[R any](ctx context.Context, payload TaskPayload[R]) <-chan handlers.ResumableResult[R] {
 	return effects.PerformResumableEffect[TaskPayload[R], R](ctx, effectmodel.EffectTask, payload)
 }

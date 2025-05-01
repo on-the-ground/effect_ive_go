@@ -49,6 +49,6 @@
 //	    ctx, end := effects.WithStateEffectHandler(ctx, nil)
 //	    defer end()
 //
-//	    effects.StateEffect(ctx, effects.SetStatePayload{Key: "foo", Value: "bar"})
+//	    effects.StateEff(ctx, effects.SetStatePayload{Key: "foo", Value: "bar"})
 //	}
 package effects

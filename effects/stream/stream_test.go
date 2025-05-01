@@ -180,7 +180,7 @@ outerloop:
 			assert.Equal(t, 42, v)
 			break outerloop
 		case d := <-dropped:
-			log.LogEffect(ctx, log.LogWarn, "dropped", map[string]interface{}{
+			log.LogEff(ctx, log.LogWarn, "dropped", map[string]interface{}{
 				"dropped": d,
 			})
 			assert.Equal(t, 42, d)
