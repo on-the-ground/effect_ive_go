@@ -13,7 +13,7 @@ import (
 
 func TestTaskEffect_Success(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	ctx, endOfTaskHandler := task.WithEffectHandler[string](ctx, 1)
@@ -40,7 +40,7 @@ func TestTaskEffect_Success(t *testing.T) {
 func TestTaskEffect_Cancelled(t *testing.T) {
 	t.Skip("non-deterministic test. work in progress")
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	// Cancel after a little bit while.
@@ -79,7 +79,7 @@ func TestTaskEffect_Cancelled(t *testing.T) {
 
 func TestTaskEffect_Parallel(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	ctx, endOfTaskHandler := task.WithEffectHandler[int](ctx, 10)

@@ -19,7 +19,7 @@ import (
 func TestStateEffect_BasicLookup(t *testing.T) {
 	ctx := context.Background()
 
-	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	ctx, closeFn := state.WithEffectHandler(
@@ -44,7 +44,7 @@ func TestStateEffect_BasicLookup(t *testing.T) {
 
 func TestStateEffect_KeyNotFound(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 	ctx, closeFn := state.WithEffectHandler(
 		ctx,
@@ -66,7 +66,7 @@ func TestStateEffect_KeyNotFound(t *testing.T) {
 func TestStateEffect_DelegatesToUpperScope(t *testing.T) {
 	ctx := context.Background()
 
-	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	upperCtx, upperClose := state.WithEffectHandler(
@@ -102,7 +102,7 @@ func TestStateEffect_DelegatesToUpperScope(t *testing.T) {
 func TestStateEffect_ConcurrentPartitionedAccess(t *testing.T) {
 	ctx := context.Background()
 
-	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	// prepare key-value map
@@ -176,7 +176,7 @@ func TestStateEffect_ConcurrentPartitionedAccess(t *testing.T) {
 
 func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	ctx, cancel := state.WithEffectHandler(
@@ -243,7 +243,7 @@ func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 
 func TestStateEffect_ContextTimeout(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	ctx, cancel := state.WithEffectHandler(
@@ -274,7 +274,7 @@ func TestStateEffect_ContextTimeout(t *testing.T) {
 
 func TestStateEffect_SetAndGet(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	ctx, cancel := state.WithEffectHandler(
@@ -300,7 +300,7 @@ func TestStateEffect_SetAndGet(t *testing.T) {
 
 func TestStateEffect_SourcePayloadReturnsSink(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -364,7 +364,7 @@ func TestStateEffect_SourcePayloadReturnsSink(t *testing.T) {
 
 func TestStore_Delegation(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	// Tier 2 - has key x=1
@@ -427,7 +427,7 @@ func TestStore_Delegation(t *testing.T) {
 
 func TestCompareAndSwap_Delegation(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	// Tier 2 - has key x=1
@@ -499,7 +499,7 @@ func TestCompareAndSwap_Delegation(t *testing.T) {
 
 func TestCompareAndDelete_Delegation(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	// Tier 2 - has key y=99
