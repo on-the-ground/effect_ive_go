@@ -16,7 +16,7 @@ func WithTestLogEffectHandler(
 		zapcore.Lock(os.Stdout),
 		zap.DebugLevel,
 	)
-	return WithZapLogEffectHandler(
+	return WithZapEffectHandler(
 		ctx,
 		1,
 		zap.New(consoleCore),

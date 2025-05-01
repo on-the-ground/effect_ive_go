@@ -18,7 +18,7 @@ func TestStreamEffect_MapFilterMerge(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, end := stream.WithStreamEffectHandler[int](ctx, 10)
+	ctx, end := stream.WithEffectHandler[int](ctx, 10)
 	defer end()
 
 	source := make(chan int)
@@ -26,7 +26,7 @@ func TestStreamEffect_MapFilterMerge(t *testing.T) {
 	filterSink := make(chan string)
 
 	// Step 1: Map (int -> string)
-	stream.StreamEffect[int](ctx, stream.MapStreamPayload[int, string]{
+	stream.Effect[int](ctx, stream.MapStreamPayload[int, string]{
 		Source: source,
 		Sink:   mapSink,
 		MapFn: func(v int) string {
@@ -35,7 +35,7 @@ func TestStreamEffect_MapFilterMerge(t *testing.T) {
 	})
 
 	// Step 2: Filter (only even values)
-	stream.StreamEffect[string](ctx, stream.FilterStreamPayload[string]{
+	stream.Effect[string](ctx, stream.FilterStreamPayload[string]{
 		Source:    mapSink,
 		Sink:      filterSink,
 		Predicate: func(v string) bool { return v == "v=2" || v == "v=4" },
@@ -74,7 +74,7 @@ func TestStreamEffect_ShutdownPropagation(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, end := stream.WithStreamEffectHandler[int](ctx, 10)
+	ctx, end := stream.WithEffectHandler[int](ctx, 10)
 	defer end()
 
 	source := make(chan int)
@@ -84,7 +84,7 @@ func TestStreamEffect_ShutdownPropagation(t *testing.T) {
 	done := make(chan string, 3) // map/filter/consumer
 
 	// MapEffect
-	stream.StreamEffect[int](ctx, stream.MapStreamPayload[int, string]{
+	stream.Effect[int](ctx, stream.MapStreamPayload[int, string]{
 		Source: source,
 		Sink:   mapSink,
 		MapFn: func(v int) string {
@@ -93,7 +93,7 @@ func TestStreamEffect_ShutdownPropagation(t *testing.T) {
 	})
 
 	// FilterEffect
-	stream.StreamEffect[string](ctx, stream.FilterStreamPayload[string]{
+	stream.Effect[string](ctx, stream.FilterStreamPayload[string]{
 		Source:    mapSink,
 		Sink:      filterSink,
 		Predicate: func(v string) bool { return strings.HasSuffix(v, "2") || strings.HasSuffix(v, "4") },
@@ -151,7 +151,7 @@ func TestSubscribeStreamPayload_OneSinkReceivesEvent(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, endOfStreamHandler := stream.WithStreamEffectHandler[int](ctx, 32)
+	ctx, endOfStreamHandler := stream.WithEffectHandler[int](ctx, 32)
 	defer endOfStreamHandler()
 
 	source := make(chan int, 1)
@@ -159,7 +159,7 @@ func TestSubscribeStreamPayload_OneSinkReceivesEvent(t *testing.T) {
 	dropped := make(chan int, stream.MinCapacityOfDroppedChannel)
 
 	// 1. Subscribe sink
-	stream.StreamEffect[int](ctx, stream.SubscribeStreamPayload[int]{
+	stream.Effect[int](ctx, stream.SubscribeStreamPayload[int]{
 		Source: source,
 		Target: stream.NewSinkDropPair(
 			sink,
@@ -180,7 +180,7 @@ outerloop:
 			assert.Equal(t, 42, v)
 			break outerloop
 		case d := <-dropped:
-			log.LogEff(ctx, log.LogWarn, "dropped", map[string]interface{}{
+			log.Effect(ctx, log.LogWarn, "dropped", map[string]interface{}{
 				"dropped": d,
 			})
 			assert.Equal(t, 42, d)
@@ -201,7 +201,7 @@ func TestSubscribeStreamPayload_MultipleSinksSequentiallyReceiveEvent(t *testing
 	ctx, logEnd := log.WithTestLogEffectHandler(ctx)
 	defer logEnd()
 
-	ctx, teardown := stream.WithStreamEffectHandler[int](ctx, 32)
+	ctx, teardown := stream.WithEffectHandler[int](ctx, 32)
 	defer teardown()
 
 	source := make(chan int, 2)
@@ -210,7 +210,7 @@ func TestSubscribeStreamPayload_MultipleSinksSequentiallyReceiveEvent(t *testing
 	dropped := make(chan int, stream.MinCapacityOfDroppedChannel)
 
 	// 1. Subscribe sinks
-	stream.StreamEffect[int](ctx, stream.SubscribeStreamPayload[int]{
+	stream.Effect[int](ctx, stream.SubscribeStreamPayload[int]{
 		Source: source,
 		Target: stream.NewSinkDropPair(
 			sink1,
@@ -218,7 +218,7 @@ func TestSubscribeStreamPayload_MultipleSinksSequentiallyReceiveEvent(t *testing
 		),
 	})
 
-	stream.StreamEffect[int](ctx, stream.SubscribeStreamPayload[int]{
+	stream.Effect[int](ctx, stream.SubscribeStreamPayload[int]{
 		Source: source,
 		Target: stream.NewSinkDropPair(
 			sink2,
@@ -282,7 +282,7 @@ func TestStreamEffect_OrderByStreamPayload_SortsCorrectly(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, teardown := stream.WithStreamEffectHandler[int](ctx, 32)
+	ctx, teardown := stream.WithEffectHandler[int](ctx, 32)
 	defer teardown()
 
 	source := make(chan int)
@@ -297,7 +297,7 @@ func TestStreamEffect_OrderByStreamPayload_SortsCorrectly(t *testing.T) {
 		source <- 3
 	}()
 
-	stream.StreamEffect[int](ctx, stream.OrderByStreamPayload[int]{
+	stream.Effect[int](ctx, stream.OrderByStreamPayload[int]{
 		WindowSize: 5,
 		Source:     source,
 		Sink:       sink,
@@ -322,7 +322,7 @@ func TestStreamEffect_MergeStreamPayload_DoubleClose(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, teardown := stream.WithStreamEffectHandler[int](ctx, 32)
+	ctx, teardown := stream.WithEffectHandler[int](ctx, 32)
 	defer teardown()
 
 	// Two source channels
@@ -332,7 +332,7 @@ func TestStreamEffect_MergeStreamPayload_DoubleClose(t *testing.T) {
 	sink := make(chan int)
 
 	// Merge both sources into one sink by MergeStreamPayload
-	stream.StreamEffect[int](ctx, stream.MergeStreamPayload[int]{
+	stream.Effect[int](ctx, stream.MergeStreamPayload[int]{
 		Sources: []<-chan int{source1, source2},
 		Sink:    sink,
 	})
