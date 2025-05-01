@@ -22,7 +22,7 @@ func TestStateEffect_BasicLookup(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, closeFn := state.WithStateEffectHandler(
+	ctx, closeFn := state.WithEffectHandler(
 		ctx,
 		effectmodel.NewEffectScopeConfig(1, 1),
 		false,
@@ -33,7 +33,7 @@ func TestStateEffect_BasicLookup(t *testing.T) {
 	)
 	defer closeFn()
 
-	v, err := state.StateEff(ctx, state.Load{Key: "foo"})
+	v, err := state.Effect(ctx, state.Load{Key: "foo"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestStateEffect_KeyNotFound(t *testing.T) {
 	ctx := context.Background()
 	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
-	ctx, closeFn := state.WithStateEffectHandler(
+	ctx, closeFn := state.WithEffectHandler(
 		ctx,
 		effectmodel.NewEffectScopeConfig(1, 1),
 		false,
@@ -57,7 +57,7 @@ func TestStateEffect_KeyNotFound(t *testing.T) {
 	)
 	defer closeFn()
 
-	_, err := state.StateEff(ctx, state.Load{Key: "bar"})
+	_, err := state.Effect(ctx, state.Load{Key: "bar"})
 	if err == nil || !strings.Contains(err.Error(), "key not found") {
 		t.Fatalf("expected key-not-found error, got: %v", err)
 	}
@@ -69,7 +69,7 @@ func TestStateEffect_DelegatesToUpperScope(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	upperCtx, upperClose := state.WithStateEffectHandler(
+	upperCtx, upperClose := state.WithEffectHandler(
 		ctx,
 		effectmodel.NewEffectScopeConfig(1, 1),
 		false,
@@ -81,7 +81,7 @@ func TestStateEffect_DelegatesToUpperScope(t *testing.T) {
 	defer upperClose()
 
 	lowerCtx := context.WithValue(upperCtx, "dummy", 1)
-	lowerCtx, lowerClose := state.WithStateEffectHandler(
+	lowerCtx, lowerClose := state.WithEffectHandler(
 		lowerCtx,
 		effectmodel.NewEffectScopeConfig(1, 1),
 		true,
@@ -90,7 +90,7 @@ func TestStateEffect_DelegatesToUpperScope(t *testing.T) {
 	)
 	defer lowerClose()
 
-	v, err := state.StateEff(lowerCtx, state.Load{Key: "upper"})
+	v, err := state.Effect(lowerCtx, state.Load{Key: "upper"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestStateEffect_ConcurrentPartitionedAccess(t *testing.T) {
 	}
 
 	// register the state handler with partitioning
-	ctx, cancel := state.WithStateEffectHandler(
+	ctx, cancel := state.WithEffectHandler(
 		ctx,
 		effectmodel.NewEffectScopeConfig(10, 10),
 		false,
@@ -140,7 +140,7 @@ func TestStateEffect_ConcurrentPartitionedAccess(t *testing.T) {
 			keyIdx := i % len(states) // deterministic but shuffled
 			key := fmt.Sprintf("key%d", keyIdx)
 
-			v, err := state.StateEff(ctx, state.Load{Key: key})
+			v, err := state.Effect(ctx, state.Load{Key: key})
 			mu.Lock()
 			defer mu.Unlock()
 
@@ -179,7 +179,7 @@ func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, cancel := state.WithStateEffectHandler(
+	ctx, cancel := state.WithEffectHandler(
 		ctx,
 		effectmodel.NewEffectScopeConfig(8, 8),
 		false,
@@ -199,12 +199,12 @@ func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 			key := fmt.Sprintf("key%d", i%10)
 
 			// Load current value
-			v, _ := state.StateEff(ctx, state.Load{Key: key})
+			v, _ := state.Effect(ctx, state.Load{Key: key})
 
 			switch i % 4 {
 			case 0:
 				// Store unconditionally
-				_, err := state.StateEff(ctx, state.Store{
+				_, err := state.Effect(ctx, state.Store{
 					Key: key,
 					New: i,
 				})
@@ -212,7 +212,7 @@ func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 
 			case 1:
 				// Compare and delete
-				deleted, err := state.StateEff(ctx, state.CompareAndDelete{
+				deleted, err := state.Effect(ctx, state.CompareAndDelete{
 					Key: key,
 					Old: v,
 				})
@@ -222,7 +222,7 @@ func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 
 			case 2:
 				// Compare and swap
-				swapped, err := state.StateEff(ctx, state.CompareAndSwap{
+				swapped, err := state.Effect(ctx, state.CompareAndSwap{
 					Key: key,
 					Old: v,
 					New: fmt.Sprintf("val-%d", i),
@@ -233,7 +233,7 @@ func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 
 			case 3:
 				// Just load again to add read load
-				_, _ = state.StateEff(ctx, state.Load{Key: key})
+				_, _ = state.Effect(ctx, state.Load{Key: key})
 			}
 		}(i)
 	}
@@ -246,7 +246,7 @@ func TestStateEffect_ContextTimeout(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, cancel := state.WithStateEffectHandler(
+	ctx, cancel := state.WithEffectHandler(
 		ctx,
 		effectmodel.NewEffectScopeConfig(1, 1),
 		false,
@@ -263,8 +263,8 @@ func TestStateEffect_ContextTimeout(t *testing.T) {
 
 	time.Sleep(1 * time.Millisecond) // allow timeout to occur
 
-	res, err := state.StateEff(timeoutCtx, state.Load{Key: "any"})
-	log.LogEff(ctx, log.LogInfo, "final result", map[string]interface{}{
+	res, err := state.Effect(timeoutCtx, state.Load{Key: "any"})
+	log.Effect(ctx, log.LogInfo, "final result", map[string]interface{}{
 		"res": res,
 		"err": err,
 	})
@@ -277,7 +277,7 @@ func TestStateEffect_SetAndGet(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, cancel := state.WithStateEffectHandler(
+	ctx, cancel := state.WithEffectHandler(
 		ctx,
 		effectmodel.NewEffectScopeConfig(1, 1),
 		false,
@@ -286,14 +286,14 @@ func TestStateEffect_SetAndGet(t *testing.T) {
 	)
 	defer cancel()
 
-	old, _ := state.StateEff(ctx, state.Load{Key: "foo"})
-	state.StateEff(ctx, state.Store{Key: "foo", New: (777)})
-	defer log.LogEff(ctx, log.LogInfo, "swapped", map[string]any{
+	old, _ := state.Effect(ctx, state.Load{Key: "foo"})
+	state.Effect(ctx, state.Store{Key: "foo", New: (777)})
+	defer log.Effect(ctx, log.LogInfo, "swapped", map[string]any{
 		"old": old,
 		"new": 777,
 	})
 
-	v, err := state.StateEff(ctx, state.Load{Key: "foo"})
+	v, err := state.Effect(ctx, state.Load{Key: "foo"})
 	assert.NoError(t, err)
 	assert.Equal(t, v, 777)
 }
@@ -306,7 +306,7 @@ func TestStateEffect_SourcePayloadReturnsSink(t *testing.T) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	ctx, end := state.WithStateEffectHandler(
+	ctx, end := state.WithEffectHandler(
 		ctx,
 		effectmodel.NewEffectScopeConfig(8, 8),
 		false,
@@ -316,7 +316,7 @@ func TestStateEffect_SourcePayloadReturnsSink(t *testing.T) {
 	defer end()
 
 	// 1. Get sink channel from SourceStatePayload
-	chVal, err := state.StateEff(ctx, state.Source{})
+	chVal, err := state.Effect(ctx, state.Source{})
 	require.NoError(t, err)
 
 	sink, ok := chVal.(chan state.TimeBoundedPayload)
@@ -325,7 +325,7 @@ func TestStateEffect_SourcePayloadReturnsSink(t *testing.T) {
 	// 2. Send a StoreStatePayload
 	key := "test-key"
 	newVal := "new-value"
-	_, err = state.StateEff(ctx, state.Store{
+	_, err = state.Effect(ctx, state.Store{
 		Key: key,
 		New: newVal,
 	})
@@ -344,7 +344,7 @@ func TestStateEffect_SourcePayloadReturnsSink(t *testing.T) {
 
 	// 4. Send a CompareAndDeleteStatePayload
 	oldVal := "new-value"
-	_, err = state.StateEff(ctx, state.CompareAndDelete{
+	_, err = state.Effect(ctx, state.CompareAndDelete{
 		Key: key,
 		Old: oldVal,
 	})
@@ -368,7 +368,7 @@ func TestStore_Delegation(t *testing.T) {
 	defer endOfLogHandler()
 
 	// Tier 2 - has key x=1
-	ctx2, endOfTier2 := state.WithStateEffectHandler(
+	ctx2, endOfTier2 := state.WithEffectHandler(
 		ctx,
 		effectmodel.NewEffectScopeConfig(2, 2),
 		false,
@@ -378,7 +378,7 @@ func TestStore_Delegation(t *testing.T) {
 	defer endOfTier2()
 
 	// Tier 1 - has key x=1
-	ctx1, endOfTier1 := state.WithStateEffectHandler(
+	ctx1, endOfTier1 := state.WithEffectHandler(
 		ctx2,
 		effectmodel.NewEffectScopeConfig(2, 2),
 		false,
@@ -388,7 +388,7 @@ func TestStore_Delegation(t *testing.T) {
 	defer endOfTier1()
 
 	// Tier 0 - has key x=1
-	ctx0, endOfTier0 := state.WithStateEffectHandler(
+	ctx0, endOfTier0 := state.WithEffectHandler(
 		ctx1,
 		effectmodel.NewEffectScopeConfig(2, 2),
 		true,
@@ -398,28 +398,28 @@ func TestStore_Delegation(t *testing.T) {
 	defer endOfTier0()
 
 	// Store should succeed in tier 0
-	_, err := state.StateEff(ctx0, state.Store{
+	_, err := state.Effect(ctx0, state.Store{
 		Key: "x",
 		New: 2,
 	})
 	assert.NoError(t, err, "Store delegation failed")
 
 	// Confirm that new value is set
-	val, err := state.StateEff(ctx0, state.Load{
+	val, err := state.Effect(ctx0, state.Load{
 		Key: "x",
 	})
 	assert.NoError(t, err, "Load failed")
 	assert.Equal(t, val.(int), 2, "Expected x=2")
 
 	// Confirm that new value is set
-	val, err = state.StateEff(ctx1, state.Load{
+	val, err = state.Effect(ctx1, state.Load{
 		Key: "x",
 	})
 	assert.NoError(t, err, "Load failed")
 	assert.Equal(t, val.(int), 2, "Expected x=2")
 
 	// Confirm that prev value is set
-	_, err = state.StateEff(ctx2, state.Load{
+	_, err = state.Effect(ctx2, state.Load{
 		Key: "x",
 	})
 	assert.ErrorIs(t, err, state.ErrNoSuchKey, "should be no such key")
@@ -431,7 +431,7 @@ func TestCompareAndSwap_Delegation(t *testing.T) {
 	defer endOfLogHandler()
 
 	// Tier 2 - has key x=1
-	ctx2, endOfTier2 := state.WithStateEffectHandler(
+	ctx2, endOfTier2 := state.WithEffectHandler(
 		ctx,
 		effectmodel.NewEffectScopeConfig(2, 2),
 		false,
@@ -443,7 +443,7 @@ func TestCompareAndSwap_Delegation(t *testing.T) {
 	defer endOfTier2()
 
 	// Tier 1 - has key x=1
-	ctx1, endOfTier1 := state.WithStateEffectHandler(
+	ctx1, endOfTier1 := state.WithEffectHandler(
 		ctx2,
 		effectmodel.NewEffectScopeConfig(2, 2),
 		false,
@@ -455,7 +455,7 @@ func TestCompareAndSwap_Delegation(t *testing.T) {
 	defer endOfTier1()
 
 	// Tier 0 - has key x=1
-	ctx0, endOfTier0 := state.WithStateEffectHandler(
+	ctx0, endOfTier0 := state.WithEffectHandler(
 		ctx1,
 		effectmodel.NewEffectScopeConfig(2, 2),
 		true,
@@ -467,7 +467,7 @@ func TestCompareAndSwap_Delegation(t *testing.T) {
 	defer endOfTier0()
 
 	// CAS should succeed in tier 0
-	ok, err := state.StateEff(ctx0, state.CompareAndSwap{
+	ok, err := state.Effect(ctx0, state.CompareAndSwap{
 		Key: "x",
 		Old: 1,
 		New: 2,
@@ -476,21 +476,21 @@ func TestCompareAndSwap_Delegation(t *testing.T) {
 	assert.True(t, ok.(bool), "CAS delegation returned false, expected true")
 
 	// Confirm that new value is set
-	val, err := state.StateEff(ctx0, state.Load{
+	val, err := state.Effect(ctx0, state.Load{
 		Key: "x",
 	})
 	assert.NoError(t, err, "Load failed")
 	assert.Equal(t, val.(int), 2, "Expected x=2")
 
 	// Confirm that new value is set
-	val, err = state.StateEff(ctx1, state.Load{
+	val, err = state.Effect(ctx1, state.Load{
 		Key: "x",
 	})
 	assert.NoError(t, err, "Load failed")
 	assert.Equal(t, val.(int), 2, "Expected x=2")
 
 	// Confirm that prev value is set
-	val, err = state.StateEff(ctx2, state.Load{
+	val, err = state.Effect(ctx2, state.Load{
 		Key: "x",
 	})
 	assert.NoError(t, err, "Load failed")
@@ -503,7 +503,7 @@ func TestCompareAndDelete_Delegation(t *testing.T) {
 	defer endOfLogHandler()
 
 	// Tier 2 - has key y=99
-	ctx2, endOfTier2 := state.WithStateEffectHandler(
+	ctx2, endOfTier2 := state.WithEffectHandler(
 		ctx,
 		effectmodel.NewEffectScopeConfig(2, 2),
 		false,
@@ -515,7 +515,7 @@ func TestCompareAndDelete_Delegation(t *testing.T) {
 	defer endOfTier2()
 
 	// Tier 1 - has key y=99
-	ctx1, endOfTier1 := state.WithStateEffectHandler(
+	ctx1, endOfTier1 := state.WithEffectHandler(
 		ctx2,
 		effectmodel.NewEffectScopeConfig(2, 2),
 		false,
@@ -527,7 +527,7 @@ func TestCompareAndDelete_Delegation(t *testing.T) {
 	defer endOfTier1()
 
 	// Tier 0 - has key y=99
-	ctx0, endOfTier0 := state.WithStateEffectHandler(
+	ctx0, endOfTier0 := state.WithEffectHandler(
 		ctx1,
 		effectmodel.NewEffectScopeConfig(2, 2),
 		true,
@@ -539,7 +539,7 @@ func TestCompareAndDelete_Delegation(t *testing.T) {
 	defer endOfTier0()
 
 	// CAD should succeed in tier 0
-	ok, err := state.StateEff(ctx0, state.CompareAndDelete{
+	ok, err := state.Effect(ctx0, state.CompareAndDelete{
 		Key: "y",
 		Old: 99,
 	})
@@ -547,7 +547,7 @@ func TestCompareAndDelete_Delegation(t *testing.T) {
 	assert.True(t, ok.(bool), "CAD delegation returned false, expected true")
 
 	// Confirm that prev value is set
-	val, err := state.StateEff(ctx2, state.Load{
+	val, err := state.Effect(ctx2, state.Load{
 		Key: "y",
 	})
 	assert.NoError(t, err, "Load failed")

@@ -37,13 +37,13 @@ func (lp payload) PartitionKey() string {
 	return "unpartitioned"
 }
 
-// WithZapLogEffectHandler registers a fire-and-forget log effect handler using zap.Logger.
+// WithZapEffectHandler registers a fire-and-forget log effect handler using zap.Logger.
 // It reads buffer size and worker count from the binding effect configuration.
 // The returned context includes the handler under the EffectLog enum.
 // The teardown function should be called when the effect handler is no longer needed.
 // If the teardown function is called early, the effect handler will be closed.
 // The context returned by the teardown function should be used for further operations.
-func WithZapLogEffectHandler(
+func WithZapEffectHandler(
 	ctx context.Context,
 	bufferSize int,
 	logger *zap.Logger,
@@ -79,9 +79,9 @@ func WithZapLogEffectHandler(
 	)
 }
 
-// LogEffect performs a fire-and-forget log effect using the EffectLog handler in the context.
+// Effect performs a fire-and-forget log effect using the EffectLog handler in the context.
 // This should be used to emit structured logs within an effect-managed execution scope.
-func LogEff(ctx context.Context, level LogLevel, msg string, fields map[string]interface{}) {
+func Effect(ctx context.Context, level LogLevel, msg string, fields map[string]interface{}) {
 	effects.FireAndForgetEffect(ctx, effectmodel.EffectLog, payload{
 		Level:   level,
 		Message: msg,

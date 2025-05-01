@@ -18,7 +18,7 @@ func (bp Payload) PartitionKey() string {
 	return string(bp)
 }
 
-// WithBindingEffectHandler registers a resumable, partitionable effect handler for bindings.
+// WithEffectHandler registers a resumable, partitionable effect handler for bindings.
 //
 //   - Reads buffer/worker config via BindingEffect itself (bootstrapped).
 //   - If no config is found, defaults are used (bufferSize = 1, numWorkers = 1).
@@ -29,7 +29,7 @@ func (bp Payload) PartitionKey() string {
 //   - The teardown function should be called when the effect handler is no longer needed.
 //   - If the teardown function is called early, the effect handler will be closed,
 //     you should use the context returned by the teardown function.
-func WithBindingEffectHandler(
+func WithEffectHandler(
 	ctx context.Context,
 	config effectmodel.EffectScopeConfig,
 	bindingMap map[string]any,
@@ -48,7 +48,7 @@ func WithBindingEffectHandler(
 // BindingEffect performs a key-based lookup using the Binding effect handler.
 //
 // Returns either the value found or an error if the key is not found and no upper scope provides it.
-func BindingEff(ctx context.Context, key string) (val any, err error) {
+func Effect(ctx context.Context, key string) (val any, err error) {
 	resultCh := effects.PerformResumableEffect[Payload, any](ctx, effectmodel.EffectBinding, Payload(key))
 	select {
 	case res, ok := <-resultCh:
@@ -72,7 +72,7 @@ func normalizeBindingMap(bm map[string]any) map[string]any {
 }
 
 // delegateBindingEffect is an internal helper for performing the binding effect directly.
-func delegateBindingEff(upperCtx context.Context, key string) (res any, err error) {
+func delegateBindingEffect(upperCtx context.Context, key string) (res any, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			// Handle panic and return a nil value with an error
@@ -83,7 +83,7 @@ func delegateBindingEff(upperCtx context.Context, key string) (res any, err erro
 	}()
 
 	// Delegate the effect to the upper handler
-	return BindingEff(upperCtx, key)
+	return Effect(upperCtx, key)
 }
 
 // bindingHandler
@@ -99,7 +99,7 @@ func (bh bindingHandler) handle(ctx context.Context, payload Payload) (any, erro
 	key := string(payload)
 	v, ok := bh.bindingMap[key]
 	if !ok {
-		return delegateBindingEff(ctx, key)
+		return delegateBindingEffect(ctx, key)
 	}
 	return v, nil
 }

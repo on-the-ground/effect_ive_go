@@ -14,9 +14,9 @@ import (
 	"go.uber.org/zap"
 )
 
-func WithStreamEffectHandler[T any](parentCtx context.Context, bufferSize int) (context.Context, func() context.Context) {
+func WithEffectHandler[T any](parentCtx context.Context, bufferSize int) (context.Context, func() context.Context) {
 
-	ctx, endOfConcurrencyHandler := concurrency.WithConcurrencyEffectHandler(parentCtx, bufferSize)
+	ctx, endOfConcurrencyHandler := concurrency.WithEffectHandler(parentCtx, bufferSize)
 
 	reg := channelRegistry[T]{
 		Map: &sync.Map{},
@@ -25,7 +25,7 @@ func WithStreamEffectHandler[T any](parentCtx context.Context, bufferSize int) (
 		ctx,
 		bufferSize,
 		effectmodel.EffectStream,
-		reg.handleSubscriptionEff,
+		reg.handleSubscriptionEffect,
 	)
 
 	return ctx, func() context.Context {
@@ -36,24 +36,24 @@ func WithStreamEffectHandler[T any](parentCtx context.Context, bufferSize int) (
 	}
 }
 
-func StreamEffect[T any](ctx context.Context, payload payload) {
+func Effect[T any](ctx context.Context, payload payload) {
 	switch msg := payload.(type) {
 	case MapStreamPayloadAny:
-		concurrency.ConcurrencyEff(ctx, msg.Run)
+		concurrency.Effect(ctx, msg.Run)
 	case FilterStreamPayload[T]:
-		concurrency.ConcurrencyEff(ctx, func(ctx context.Context) {
+		concurrency.Effect(ctx, func(ctx context.Context) {
 			filter(ctx, msg.Source, msg.Sink, msg.Predicate)
 		})
 	case MergeStreamPayload[T]:
-		localCtx, endOfWorkers := concurrency.WithConcurrencyEffectHandler(ctx, len(msg.Sources)*2)
+		localCtx, endOfWorkers := concurrency.WithEffectHandler(ctx, len(msg.Sources)*2)
 
 		for _, source := range msg.Sources {
-			concurrency.ConcurrencyEff(localCtx, func(ctx context.Context) {
+			concurrency.Effect(localCtx, func(ctx context.Context) {
 				pipe(ctx, source, msg.Sink)
 			})
 		}
 
-		concurrency.ConcurrencyEff(ctx, func(ctx context.Context) {
+		concurrency.Effect(ctx, func(ctx context.Context) {
 			endOfWorkers()
 			close(msg.Sink)
 		})
@@ -62,7 +62,7 @@ func StreamEffect[T any](ctx context.Context, payload payload) {
 		effects.FireAndForgetEffect(ctx, effectmodel.EffectStream, msg)
 
 	case OrderByStreamPayload[T]:
-		concurrency.ConcurrencyEff(ctx, func(ctx context.Context) {
+		concurrency.Effect(ctx, func(ctx context.Context) {
 			orderBy(ctx, msg.WindowSize, msg.CmpFn, msg.Source, msg.Sink)
 		})
 
@@ -77,20 +77,20 @@ type channelRegistry[T any] struct {
 	*sync.Map
 }
 
-func (reg channelRegistry[T]) handleSubscriptionEff(ctx context.Context, msg SubscribeStreamPayload[T]) {
+func (reg channelRegistry[T]) handleSubscriptionEffect(ctx context.Context, msg SubscribeStreamPayload[T]) {
 	var firstSink bool
 
 	raw, ok := reg.Load(msg.Source.String())
 	firstSink = !ok
 	if firstSink {
 		reg.Store(msg.Source.String(), &RegisteredList[T]{Registered: []*sinkDropPair[T]{msg.Target}})
-		concurrency.ConcurrencyEff(ctx, func(ctx context.Context) {
+		concurrency.Effect(ctx, func(ctx context.Context) {
 			logger, _ := zap.NewProduction()
-			ctx, endOfLogHandler := log.WithZapLogEffectHandler(ctx, 10, logger)
+			ctx, endOfLogHandler := log.WithZapEffectHandler(ctx, 10, logger)
 			defer endOfLogHandler()
 			defer func() {
 				if r := recover(); r != nil {
-					log.LogEff(ctx, log.LogError, "panic while registering sink", map[string]interface{}{
+					log.Effect(ctx, log.LogError, "panic while registering sink", map[string]interface{}{
 						"error": r,
 						"key":   msg.Source,
 					})
@@ -103,7 +103,7 @@ func (reg channelRegistry[T]) handleSubscriptionEff(ctx context.Context, msg Sub
 
 	oldSinks, ok := raw.(*RegisteredList[T])
 	if !ok {
-		log.LogEff(ctx, log.LogError, "fail to cast sinks", map[string]interface{}{
+		log.Effect(ctx, log.LogError, "fail to cast sinks", map[string]interface{}{
 			"key": msg.Source,
 		})
 		return
@@ -123,7 +123,7 @@ func (reg channelRegistry[T]) handleSubscriptionEff(ctx context.Context, msg Sub
 		// race condition, the sink was already updated
 		// We need to retry the operation
 		err := fmt.Errorf("fail to append new sink")
-		log.LogEff(ctx, log.LogDebug, "tryRegistreSink: ", map[string]interface{}{
+		log.Effect(ctx, log.LogDebug, "tryRegistreSink: ", map[string]interface{}{
 			"error": err,
 			"key":   msg.Source,
 		})
@@ -132,7 +132,7 @@ func (reg channelRegistry[T]) handleSubscriptionEff(ctx context.Context, msg Sub
 
 	maxAttemps := 5
 	if err := helper.Retry(maxAttemps, tryRegisterSink); err != nil {
-		log.LogEff(ctx, log.LogError, "fail to append new sink after max attempts", map[string]interface{}{
+		log.Effect(ctx, log.LogError, "fail to append new sink after max attempts", map[string]interface{}{
 			"error": err,
 			"key":   msg.Source,
 		})
@@ -151,7 +151,7 @@ func (reg *channelRegistry[T]) arbit(ctx context.Context, source SourceAsKey[T])
 		if sinks, ok = helper.GetTypedValueOf2[*RegisteredList[T]](func() (any, bool) {
 			return reg.Load(source.String())
 		}); !ok {
-			log.LogEff(ctx, log.LogError, "fail to cast sinks, dropped an message", map[string]interface{}{
+			log.Effect(ctx, log.LogError, "fail to cast sinks, dropped an message", map[string]interface{}{
 				"value": v,
 			})
 			continue
@@ -167,7 +167,7 @@ func (reg *channelRegistry[T]) arbit(ctx context.Context, source SourceAsKey[T])
 				case <-ctx.Done():
 					return
 				default:
-					log.LogEff(ctx, log.LogError, "message dropped:", map[string]interface{}{
+					log.Effect(ctx, log.LogError, "message dropped:", map[string]interface{}{
 						"dropped": v,
 					})
 				}
@@ -178,7 +178,7 @@ func (reg *channelRegistry[T]) arbit(ctx context.Context, source SourceAsKey[T])
 				case <-ctx.Done():
 					return
 				default:
-					log.LogEff(ctx, log.LogError, "message dropped:", map[string]interface{}{
+					log.Effect(ctx, log.LogError, "message dropped:", map[string]interface{}{
 						"dropped": v,
 					})
 				}
@@ -195,7 +195,7 @@ func (reg *channelRegistry[T]) arbit(ctx context.Context, source SourceAsKey[T])
 				close(chanPair.Dropped)
 			}
 		} else {
-			log.LogEff(ctx, log.LogError, "fail to unregister sinks", map[string]interface{}{
+			log.Effect(ctx, log.LogError, "fail to unregister sinks", map[string]interface{}{
 				"key": source,
 			})
 		}
@@ -256,7 +256,7 @@ func orderBy[T any](ctx context.Context, windowSize int, cmp orderedbuffer.Compa
 	for v := range source {
 		ok := buf.Insert(ctx, v)
 		if !ok {
-			log.LogEff(ctx, log.LogDebug, "ordered buffer closed", map[string]interface{}{})
+			log.Effect(ctx, log.LogDebug, "ordered buffer closed", map[string]interface{}{})
 			return
 		}
 	}

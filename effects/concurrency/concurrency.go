@@ -9,9 +9,9 @@ import (
 	"github.com/on-the-ground/effect_ive_go/effects/log"
 )
 
-// WithConcurrencyEffectHandler installs a fire-and-forget concurrency effect handler.
+// WithEffectHandler installs a fire-and-forget concurrency effect handler.
 //
-// It allows `ConcurrencyEff(ctx, [...])` to spawn multiple goroutines under managed scope.
+// It allows `Effect(ctx, [...])` to spawn multiple goroutines under managed scope.
 //
 //   - Buffer size is configurable via binding effect.
 //   - WaitGroup + cancellation tracking ensures children are joined on shutdown.
@@ -21,7 +21,7 @@ import (
 //   - If the returned function is called early, the effect handler will be closed,
 //     and you should use the context returned by the teardown function.
 //   - The returned context is the same as the input context.
-func WithConcurrencyEffectHandler(
+func WithEffectHandler(
 	ctx context.Context,
 	bufferSize int,
 ) (context.Context, func() context.Context) {
@@ -47,20 +47,20 @@ func WithConcurrencyEffectHandler(
 	return ctx, endOfConcurrencyHandler
 }
 
-// WithConcurrencyEffectHandler installs a fire-and-forget concurrency effect handler.
+// WithEffectHandler installs a fire-and-forget concurrency effect handler.
 //
-// It allows `ConcurrencyEff(ctx, [...])` to spawn multiple goroutines under managed scope.
+// It allows `Effect(ctx, [...])` to spawn multiple goroutines under managed scope.
 //
 // - Buffer size is configurable via binding effect.
 // - WaitGroup + cancellation tracking ensures children are joined on shutdown.
 // - Worker count is fixed to 1 (non-partitioned).
-func ConcurrencyEff(ctx context.Context, fns ...func(context.Context)) {
-	effects.FireAndForgetEffect[ConcurrencyPayload](ctx, effectmodel.EffectConcurrency, fns)
+func Effect(ctx context.Context, fns ...func(context.Context)) {
+	effects.FireAndForgetEffect[Payload](ctx, effectmodel.EffectConcurrency, fns)
 }
 
-type ConcurrencyPayload []func(context.Context)
+type Payload []func(context.Context)
 
-func (cp ConcurrencyPayload) PartitionKey() string {
+func (cp Payload) PartitionKey() string {
 	return "unpartitioned"
 }
 
@@ -95,7 +95,7 @@ func (s *supervisor) watchParentCancel(parentContext context.Context) {
 			close(s.readyCh)
 			select {
 			case <-parentContext.Done():
-				log.LogEff(parentContext, log.LogInfo, "context cancelled, waiting for all routines to finish", nil)
+				log.Effect(parentContext, log.LogInfo, "context cancelled, waiting for all routines to finish", nil)
 				for _, cancelFn := range s.childrenCancels {
 					cancelFn()
 				}
@@ -117,7 +117,7 @@ func (s *supervisor) appendCancel(cancelFn context.CancelFunc) {
 // - Catches and logs panics individually.
 func (s *supervisor) spawnConcurrentChildren(
 	parentContext context.Context,
-	functions ConcurrencyPayload,
+	functions Payload,
 ) {
 	ready := sync.WaitGroup{}
 
@@ -130,7 +130,7 @@ func (s *supervisor) spawnConcurrentChildren(
 			defer s.wg.Done()
 			defer func() {
 				if r := recover(); r != nil {
-					log.LogEff(parentContext, log.LogError, "panic in child routine", map[string]interface{}{
+					log.Effect(parentContext, log.LogError, "panic in child routine", map[string]interface{}{
 						"routine": f,
 						"error":   r,
 					})
@@ -152,12 +152,12 @@ func (s *supervisor) waitChildren(ctx context.Context) {
 	ready := make(chan struct{})
 	go func() {
 		close(ready)
-		log.LogEff(ctx, log.LogInfo, "waiting for all routines to finish", nil)
+		log.Effect(ctx, log.LogInfo, "waiting for all routines to finish", nil)
 		s.wg.Wait()
 		close(waitCh)
 	}()
 	<-ready
 
 	<-waitCh
-	log.LogEff(ctx, log.LogInfo, "all routines finished", nil)
+	log.Effect(ctx, log.LogInfo, "all routines finished", nil)
 }

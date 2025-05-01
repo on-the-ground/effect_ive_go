@@ -18,7 +18,7 @@ func TestBindingEffect_BasicLookup(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, closeFn := binding.WithBindingEffectHandler(
+	ctx, closeFn := binding.WithEffectHandler(
 		ctx,
 		effectmodel.NewEffectScopeConfig(1, 1),
 		map[string]any{
@@ -27,7 +27,7 @@ func TestBindingEffect_BasicLookup(t *testing.T) {
 	)
 	defer closeFn()
 
-	v, err := binding.BindingEff(ctx, "foo")
+	v, err := binding.Effect(ctx, "foo")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -40,7 +40,7 @@ func TestBindingEffect_KeyNotFound(t *testing.T) {
 	ctx := context.Background()
 	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
-	ctx, closeFn := binding.WithBindingEffectHandler(
+	ctx, closeFn := binding.WithEffectHandler(
 		ctx,
 		effectmodel.NewEffectScopeConfig(1, 1),
 		map[string]any{
@@ -49,7 +49,7 @@ func TestBindingEffect_KeyNotFound(t *testing.T) {
 	)
 	defer closeFn()
 
-	_, err := binding.BindingEff(ctx, "bar")
+	_, err := binding.Effect(ctx, "bar")
 	if err == nil || !strings.Contains(err.Error(), "key not found") {
 		t.Fatalf("expected key-not-found error, got: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestBindingEffect_DelegatesToUpperScope(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	upperCtx, upperClose := binding.WithBindingEffectHandler(
+	upperCtx, upperClose := binding.WithEffectHandler(
 		ctx,
 		effectmodel.NewEffectScopeConfig(1, 1),
 		map[string]any{
@@ -71,14 +71,14 @@ func TestBindingEffect_DelegatesToUpperScope(t *testing.T) {
 	defer upperClose()
 
 	lowerCtx := context.WithValue(upperCtx, "dummy", 1)
-	lowerCtx, lowerClose := binding.WithBindingEffectHandler(
+	lowerCtx, lowerClose := binding.WithEffectHandler(
 		lowerCtx,
 		effectmodel.NewEffectScopeConfig(1, 1),
 		nil,
 	)
 	defer lowerClose()
 
-	v, err := binding.BindingEff(lowerCtx, "upper")
+	v, err := binding.Effect(lowerCtx, "upper")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestBindingEffect_ConcurrentPartitionedAccess(t *testing.T) {
 	}
 
 	// register the binding handler with partitioning
-	ctx, cancel := binding.WithBindingEffectHandler(ctx, effectmodel.NewEffectScopeConfig(10, 10), bindings)
+	ctx, cancel := binding.WithEffectHandler(ctx, effectmodel.NewEffectScopeConfig(10, 10), bindings)
 	defer cancel()
 
 	var (
@@ -122,7 +122,7 @@ func TestBindingEffect_ConcurrentPartitionedAccess(t *testing.T) {
 			keyIdx := i % len(bindings) // deterministic but shuffled
 			key := fmt.Sprintf("key%d", keyIdx)
 
-			v, err := binding.BindingEff(ctx, key)
+			v, err := binding.Effect(ctx, key)
 			mu.Lock()
 			defer mu.Unlock()
 
