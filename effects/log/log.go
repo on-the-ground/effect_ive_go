@@ -81,7 +81,7 @@ func WithZapLogEffectHandler(
 
 // LogEffect performs a fire-and-forget log effect using the EffectLog handler in the context.
 // This should be used to emit structured logs within an effect-managed execution scope.
-func LogEffect(ctx context.Context, level LogLevel, msg string, fields map[string]interface{}) {
+func LogEff(ctx context.Context, level LogLevel, msg string, fields map[string]interface{}) {
 	effects.FireAndForgetEffect(ctx, effectmodel.EffectLog, LogPayload{
 		Level:   level,
 		Message: msg,

@@ -50,7 +50,7 @@ func WithBindingEffectHandler(
 // BindingEffect performs a key-based lookup using the Binding effect handler.
 //
 // Returns either the value found or an error if the key is not found and no upper scope provides it.
-func BindingEffect(ctx context.Context, payload BindingPayload) (val any, err error) {
+func BindingEff(ctx context.Context, payload BindingPayload) (val any, err error) {
 	resultCh := effects.PerformResumableEffect[BindingPayload, any](ctx, effectmodel.EffectBinding, payload)
 	select {
 	case res, ok := <-resultCh:
@@ -74,7 +74,7 @@ func normalizeBindingMap(bm map[string]any) map[string]any {
 }
 
 // delegateBindingEffect is an internal helper for performing the binding effect directly.
-func delegateBindingEffect(upperCtx context.Context, payload BindingPayload) (res any, err error) {
+func delegateBindingEff(upperCtx context.Context, payload BindingPayload) (res any, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			// Handle panic and return a nil value with an error
@@ -85,7 +85,7 @@ func delegateBindingEffect(upperCtx context.Context, payload BindingPayload) (re
 	}()
 
 	// Delegate the effect to the upper handler
-	return BindingEffect(upperCtx, payload)
+	return BindingEff(upperCtx, payload)
 }
 
 // bindingHandler
@@ -100,7 +100,7 @@ type bindingHandler struct {
 func (bh bindingHandler) handle(ctx context.Context, payload BindingPayload) (any, error) {
 	v, ok := bh.bindingMap[payload.Key]
 	if !ok {
-		return delegateBindingEffect(ctx, payload)
+		return delegateBindingEff(ctx, payload)
 	}
 	return v, nil
 }

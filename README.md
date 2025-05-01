@@ -190,7 +190,7 @@ Effect-ive Go supports two main delegation models: resumable and fire-and-forget
 
     1. A handler scope is created with `WithStateEffectHandler(ctx)`
     2. Internally, a handler goroutine is spawned and waits on a `chan`
-    3. Domain logic calls `PerformResumableEffect(ctx, EffectState, payload)`
+    3. Domain logic calls `PerformResumableEff(ctx, EffectState, payload)`
     4. Handler processes the effect and sends result back on `resumeCh`
     5. Caller resumes execution with the result
 
@@ -274,14 +274,14 @@ This is similar to avoiding "nested monads" in functional programming. Instead o
 
 ```go
 // ❌ Don't do this inside an effect handler 
-msg.ResumeCh <- PerformResumableEffect(ctx, EffectConfig, payload)
+msg.ResumeCh <- PerformResumableEff(ctx, EffectConfig, payload)
 ```
 
 Do this instead:
 
 ```go
 // ✅ Do it outside and pass as explicit input 
-configValue := PerformResumableEffect(ctx, EffectConfig, payload)  PerformResumableEffect(ctx, MyEffect, configValue)
+configValue := PerformResumableEff(ctx, EffectConfig, payload)  PerformResumableEff(ctx, MyEffect, configValue)
 ```
 
 ### 🧘‍♂️ Principle
@@ -304,7 +304,7 @@ Let the **caller** take control of effect composition:
 
 ```go
 // ✅ This is fine inside any handler 
-LogEffect(ctx, LogInfo, "processing payload", map[string]any{"key": payload.Key})
+LogEff(ctx, LogInfo, "processing payload", map[string]any{"key": payload.Key})
 ```
 
 Because they **do not block** and **do not depend on return values**, they’re harmless and often useful for internal visibility.
@@ -337,7 +337,7 @@ Because they **do not block** and **do not depend on return values**, they’re 
 
     apiKey, err := GetFromBindingEffect[string](ctx, "API_KEY")
     if err != nil {
-        LogEffect(ctx, LogError, "missing binding", map[string]any{"key": "API_KEY"})
+        LogEff(ctx, LogError, "missing binding", map[string]any{"key": "API_KEY"})
         return err
     }
 
@@ -351,7 +351,7 @@ Because they **do not block** and **do not depend on return values**, they’re 
 
 ### ✅ After (Effect-ive)
 
-    LogEffect(ctx, LogInfo, "processing user", map[string]any{"userID": userID})
+    LogEff(ctx, LogInfo, "processing user", map[string]any{"userID": userID})
 
 * * *
 
@@ -364,7 +364,7 @@ Because they **do not block** and **do not depend on return values**, they’re 
 
 ### ✅ After (Effect-ive)
 
-    StateEffect(ctx, SetStatePayload{Key: "session", Value: sessionData})
+    StateEff(ctx, SetStatePayload{Key: "session", Value: sessionData})
 
 * * *
 
@@ -378,7 +378,7 @@ Because they **do not block** and **do not depend on return values**, they’re 
 
 ### ✅ After (Effect-ive)
 
-    ConcurrencyEffect(ctx, []func(context.Context){
+    ConcurrencyEff(ctx, []func(context.Context){
         func(ctx context.Context) { process(userID) },
     })
 
@@ -453,12 +453,12 @@ So, while effect systems in other languages (like Kotlin or OCaml 5) must model 
 
 ### ❌ Anti-pattern
 
-    svc := PerformEffect(ctx, EffectDependency)
+    svc := PerformEff(ctx, EffectDependency)
     return svc.DoSomething()
 
 ### ✅ Proper Usage
 
-    result := PerformEffect(ctx, EffectDoSomething, input)
+    result := PerformEff(ctx, EffectDoSomething, input)
     return result
 
 Effect systems are not about **injecting helpers** — they’re about **requesting side effects** and **receiving results**.

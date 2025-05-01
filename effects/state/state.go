@@ -115,7 +115,7 @@ func WithStateEffectHandler(
 }
 
 // StateEffect performs a state operation (get, set, delete) using the EffectState handler.
-func StateEffect(ctx context.Context, payload StatePayload) (val any, err error) {
+func StateEff(ctx context.Context, payload StatePayload) (val any, err error) {
 	resultCh := effects.PerformResumableEffect[StatePayload, any](ctx, effectmodel.EffectState, payload)
 	select {
 	case res, ok := <-resultCh:
@@ -134,7 +134,7 @@ func StateEffect(ctx context.Context, payload StatePayload) (val any, err error)
 var ErrNoSuchKey = fmt.Errorf("key not found")
 
 // delegateStateEffect is an internal helper for performing the state effect directly.
-func delegateStateEffect(upperCtx context.Context, payload StatePayload) (res any, err error) {
+func delegateStateEff(upperCtx context.Context, payload StatePayload) (res any, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			if r, ok := r.(error); ok && errors.Is(r, effectmodel.ErrNoEffectHandler) {
@@ -149,7 +149,7 @@ func delegateStateEffect(upperCtx context.Context, payload StatePayload) (res an
 	}()
 
 	// Delegate the effect to the upper handler
-	return StateEffect(upperCtx, payload)
+	return StateEff(upperCtx, payload)
 }
 
 type StateRepo interface {
@@ -179,7 +179,7 @@ func (sH stateHandler) handle(ctx context.Context, payload StatePayload) (res an
 		}
 		if sH.delegation {
 			defer func() {
-				dres, _ := delegateStateEffect(ctx, payload)
+				dres, _ := delegateStateEff(ctx, payload)
 				res = res.(bool) || dres.(bool)
 			}()
 		}
@@ -190,7 +190,7 @@ func (sH stateHandler) handle(ctx context.Context, payload StatePayload) (res an
 		}
 		payloadWithTimeSpan := statePayloadWithNow(payload)
 
-		concurrency.ConcurrencyEffect(ctx, func(ctx context.Context) {
+		concurrency.ConcurrencyEff(ctx, func(ctx context.Context) {
 			select {
 			case <-ctx.Done():
 			case sH.sink <- payloadWithTimeSpan:
@@ -205,7 +205,7 @@ func (sH stateHandler) handle(ctx context.Context, payload StatePayload) (res an
 	case CompareAndDeleteStatePayload:
 		if sH.delegation {
 			defer func() {
-				dres, _ := delegateStateEffect(ctx, payload)
+				dres, _ := delegateStateEff(ctx, payload)
 				res = res.(bool) || dres.(bool)
 			}()
 		}
@@ -216,7 +216,7 @@ func (sH stateHandler) handle(ctx context.Context, payload StatePayload) (res an
 		}
 		payloadWithTimeSpan := statePayloadWithNow(payload)
 
-		concurrency.ConcurrencyEffect(ctx, func(ctx context.Context) {
+		concurrency.ConcurrencyEff(ctx, func(ctx context.Context) {
 			select {
 			case <-ctx.Done():
 			case sH.sink <- payloadWithTimeSpan:
@@ -231,12 +231,12 @@ func (sH stateHandler) handle(ctx context.Context, payload StatePayload) (res an
 	case StoreStatePayload:
 		if sH.delegation {
 			defer func() {
-				delegateStateEffect(ctx, payload)
+				delegateStateEff(ctx, payload)
 			}()
 		}
 		sH.stateRepo.Store(payload.Key, payload.New)
 		payloadWithTimeSpan := statePayloadWithNow(payload)
-		concurrency.ConcurrencyEffect(ctx, func(ctx context.Context) {
+		concurrency.ConcurrencyEff(ctx, func(ctx context.Context) {
 			select {
 			case <-ctx.Done():
 			case sH.sink <- payloadWithTimeSpan:
@@ -250,7 +250,7 @@ func (sH stateHandler) handle(ctx context.Context, payload StatePayload) (res an
 		if ok {
 			return v, nil
 		}
-		if v, err := delegateStateEffect(ctx, payload); err != nil {
+		if v, err := delegateStateEff(ctx, payload); err != nil {
 			return nil, ErrNoSuchKey
 		} else {
 			return v, nil
