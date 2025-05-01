@@ -25,15 +25,15 @@ const (
 	LogDebug LogLevel = "debug"
 )
 
-// LogPayload is the payload structure for logging effect.
+// payload is the payload structure for logging effect.
 // It contains the log level, message string, and optional structured fields.
-type LogPayload struct {
+type payload struct {
 	Level   LogLevel
 	Message string
 	Fields  map[string]interface{}
 }
 
-func (lp LogPayload) PartitionKey() string {
+func (lp payload) PartitionKey() string {
 	return "unpartitioned"
 }
 
@@ -52,7 +52,7 @@ func WithZapLogEffectHandler(
 		ctx,
 		bufferSize,
 		effectmodel.EffectLog,
-		func(ctx context.Context, payload LogPayload) {
+		func(ctx context.Context, payload payload) {
 			fields := make([]zap.Field, 0, len(payload.Fields))
 			for k, v := range payload.Fields {
 				fields = append(fields, zap.Any(k, v))
@@ -82,7 +82,7 @@ func WithZapLogEffectHandler(
 // LogEffect performs a fire-and-forget log effect using the EffectLog handler in the context.
 // This should be used to emit structured logs within an effect-managed execution scope.
 func LogEff(ctx context.Context, level LogLevel, msg string, fields map[string]interface{}) {
-	effects.FireAndForgetEffect(ctx, effectmodel.EffectLog, LogPayload{
+	effects.FireAndForgetEffect(ctx, effectmodel.EffectLog, payload{
 		Level:   level,
 		Message: msg,
 		Fields:  fields,

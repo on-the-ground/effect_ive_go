@@ -10,72 +10,6 @@ import (
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 )
 
-var _ StatePayload = SourceStatePayload{}
-
-// SourceStatePayload is a special payload type for the state effect handler.
-type SourceStatePayload struct{}
-
-func (SourceStatePayload) PartitionKey() string         { return "" }
-func (SourceStatePayload) sealedInterfaceStatePayload() {}
-
-var _ StatePayload = LoadStatePayload{}
-
-// LoadStatePayload is the payload type for retrieving a value from the state.
-type LoadStatePayload struct {
-	Key any // should be comparable
-}
-
-// PartitionKey returns the partition key for routing this payload.
-func (p LoadStatePayload) PartitionKey() string {
-	return fmt.Sprintf("%v", p.Key)
-}
-
-// sealedInterfaceStatePayload prevents external packages from implementing statePayload.
-func (p LoadStatePayload) sealedInterfaceStatePayload() {}
-
-var _ StatePayload = CompareAndDeleteStatePayload{}
-
-// CompareAndDeleteStatePayload is the payload type for deleting a key from the state.
-type CompareAndDeleteStatePayload struct {
-	Key any // should be comparable
-	Old any // should be comparable
-}
-
-func (p CompareAndDeleteStatePayload) PartitionKey() string {
-	return fmt.Sprintf("%v", p.Key)
-}
-func (p CompareAndDeleteStatePayload) sealedInterfaceStatePayload() {}
-
-var _ StatePayload = StoreStatePayload{}
-
-// StoreStatePayload is the payload type for deleting a key from the state.
-type StoreStatePayload struct {
-	Key any // should be comparable
-	New any // should be comparable
-}
-
-func (p StoreStatePayload) PartitionKey() string {
-	return fmt.Sprintf("%v", p.Key)
-}
-func (p StoreStatePayload) sealedInterfaceStatePayload() {}
-
-// CompareAndSwapStatePayload is the payload type for inserting or updating a key-value pair.
-type CompareAndSwapStatePayload struct {
-	Key any // should be comparable
-	New any // should be comparable
-	Old any // should be comparable
-}
-
-func (p CompareAndSwapStatePayload) PartitionKey() string         { return fmt.Sprintf("%v", p.Key) }
-func (p CompareAndSwapStatePayload) sealedInterfaceStatePayload() {}
-
-// StatePayload is a sealed interface for state operations.
-// Only predefined payload types (Set, Get, Delete) can implement this interface.
-type StatePayload interface {
-	PartitionKey() string
-	sealedInterfaceStatePayload()
-}
-
 // WithStateEffectHandler registers a resumable, partitionable effect handler for managing key-value state.
 // It stores the internal state in a memory-safe sync.Map and supports sharded processing.
 // The handler is resumable and partitionable, meaning it can be resumed after a failure
@@ -93,7 +27,7 @@ func WithStateEffectHandler(
 	initMap map[string]any,
 ) (context.Context, func() context.Context) {
 	ctx, endOfConcurrency := concurrency.WithConcurrencyEffectHandler(ctx, config.BufferSize)
-	sink := make(chan TimeBoundedStatePayload, 2*config.NumWorkers)
+	sink := make(chan TimeBoundedPayload, 2*config.NumWorkers)
 	stateHandler := &stateHandler{
 		stateRepo:  stateRepo,
 		sink:       sink,
@@ -115,8 +49,8 @@ func WithStateEffectHandler(
 }
 
 // StateEffect performs a state operation (get, set, delete) using the EffectState handler.
-func StateEff(ctx context.Context, payload StatePayload) (val any, err error) {
-	resultCh := effects.PerformResumableEffect[StatePayload, any](ctx, effectmodel.EffectState, payload)
+func StateEff(ctx context.Context, payload Payload) (val any, err error) {
+	resultCh := effects.PerformResumableEffect[Payload, any](ctx, effectmodel.EffectState, payload)
 	select {
 	case res, ok := <-resultCh:
 		if ok {
@@ -134,7 +68,7 @@ func StateEff(ctx context.Context, payload StatePayload) (val any, err error) {
 var ErrNoSuchKey = fmt.Errorf("key not found")
 
 // delegateStateEffect is an internal helper for performing the state effect directly.
-func delegateStateEff(upperCtx context.Context, payload StatePayload) (res any, err error) {
+func delegateStateEff(upperCtx context.Context, payload Payload) (res any, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			if r, ok := r.(error); ok && errors.Is(r, effectmodel.ErrNoEffectHandler) {
@@ -152,26 +86,19 @@ func delegateStateEff(upperCtx context.Context, payload StatePayload) (res any, 
 	return StateEff(upperCtx, payload)
 }
 
-type StateRepo interface {
-	Load(key any) (value any, ok bool)
-	Store(key, value any)
-	CompareAndSwap(key, old, new any) (swapped bool)
-	CompareAndDelete(key, old any) (deleted bool)
-}
-
 // stateHandler defines the in-memory state store logic.
 // It supports safe concurrent access and fallback to upstream handler if key is missing.
 type stateHandler struct {
 	stateRepo  StateRepo
-	sink       chan TimeBoundedStatePayload
+	sink       chan TimeBoundedPayload
 	delegation bool
 }
 
 // handle routes the given payload to the appropriate state operation logic.
-func (sH stateHandler) handle(ctx context.Context, payload StatePayload) (res any, err error) {
+func (sH stateHandler) handle(ctx context.Context, payload Payload) (res any, err error) {
 	switch payload := payload.(type) {
 
-	case CompareAndSwapStatePayload:
+	case CompareAndSwap:
 		if payload.Old == payload.New {
 			res = true
 			err = nil
@@ -202,7 +129,7 @@ func (sH stateHandler) handle(ctx context.Context, payload StatePayload) (res an
 		err = nil
 		return
 
-	case CompareAndDeleteStatePayload:
+	case CompareAndDelete:
 		if sH.delegation {
 			defer func() {
 				dres, _ := delegateStateEff(ctx, payload)
@@ -228,7 +155,7 @@ func (sH stateHandler) handle(ctx context.Context, payload StatePayload) (res an
 		err = nil
 		return
 
-	case StoreStatePayload:
+	case Store:
 		if sH.delegation {
 			defer func() {
 				delegateStateEff(ctx, payload)
@@ -245,7 +172,7 @@ func (sH stateHandler) handle(ctx context.Context, payload StatePayload) (res an
 		})
 		return nil, nil
 
-	case LoadStatePayload:
+	case Load:
 		v, ok := sH.stateRepo.Load(payload.Key)
 		if ok {
 			return v, nil
@@ -256,7 +183,7 @@ func (sH stateHandler) handle(ctx context.Context, payload StatePayload) (res an
 			return v, nil
 		}
 
-	case SourceStatePayload:
+	case Source:
 		return sH.sink, nil
 
 	default:
@@ -267,12 +194,12 @@ func (sH stateHandler) handle(ctx context.Context, payload StatePayload) (res an
 	}
 }
 
-// TimeBoundedStatePayload is a wrapper for StatePayload with a time span.
-type TimeBoundedStatePayload struct {
-	StatePayload
+// TimeBoundedPayload is a wrapper for StatePayload with a time span.
+type TimeBoundedPayload struct {
+	Payload
 	effects.TimeSpan
 }
 
-func statePayloadWithNow(payload StatePayload) TimeBoundedStatePayload {
-	return TimeBoundedStatePayload{StatePayload: payload, TimeSpan: effects.Now()}
+func statePayloadWithNow(payload Payload) TimeBoundedPayload {
+	return TimeBoundedPayload{Payload: payload, TimeSpan: effects.Now()}
 }

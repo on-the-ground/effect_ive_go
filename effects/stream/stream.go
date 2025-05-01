@@ -36,7 +36,7 @@ func WithStreamEffectHandler[T any](parentCtx context.Context, bufferSize int) (
 	}
 }
 
-func StreamEffect[T any](ctx context.Context, payload streamEffectPayload) {
+func StreamEffect[T any](ctx context.Context, payload payload) {
 	switch msg := payload.(type) {
 	case MapStreamPayloadAny:
 		concurrency.ConcurrencyEff(ctx, msg.Run)

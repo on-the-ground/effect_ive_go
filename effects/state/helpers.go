@@ -10,7 +10,7 @@ import (
 // Returns a zero value and error if the key is not found or the type is mismatched.
 func GetFromStateEff[T any](ctx context.Context, key string) (T, error) {
 	return helper.GetTypedValueOf[T](func() (any, error) {
-		return StateEff(ctx, LoadStatePayload{Key: key})
+		return StateEff(ctx, Load{Key: key})
 	})
 }
 
@@ -18,6 +18,6 @@ func GetFromStateEff[T any](ctx context.Context, key string) (T, error) {
 // It panics if the key is missing or the type doesn't match.
 func MustGetFromStateEff[T any](ctx context.Context, key string) T {
 	return helper.MustGetTypedValue[T](func() (any, error) {
-		return StateEff(ctx, LoadStatePayload{Key: key})
+		return StateEff(ctx, Load{Key: key})
 	})
 }
