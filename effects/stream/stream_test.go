@@ -15,7 +15,7 @@ import (
 
 func TestStreamEffect_MapFilterMerge(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	ctx, end := stream.WithEffectHandler[int](ctx, 10)
@@ -71,7 +71,7 @@ func TestStreamEffect_MapFilterMerge(t *testing.T) {
 
 func TestStreamEffect_ShutdownPropagation(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	ctx, end := stream.WithEffectHandler[int](ctx, 10)
@@ -148,7 +148,7 @@ func TestStreamEffect_ShutdownPropagation(t *testing.T) {
 
 func TestSubscribeStreamPayload_OneSinkReceivesEvent(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	ctx, endOfStreamHandler := stream.WithEffectHandler[int](ctx, 32)
@@ -198,7 +198,7 @@ outerloop:
 
 func TestSubscribeStreamPayload_MultipleSinksSequentiallyReceiveEvent(t *testing.T) {
 	ctx := context.Background()
-	ctx, logEnd := log.WithTestLogEffectHandler(ctx)
+	ctx, logEnd := log.WithTestEffectHandler(ctx)
 	defer logEnd()
 
 	ctx, teardown := stream.WithEffectHandler[int](ctx, 32)
@@ -279,7 +279,7 @@ func TestSubscribeStreamPayload_MultipleSinksSequentiallyReceiveEvent(t *testing
 
 func TestStreamEffect_OrderByStreamPayload_SortsCorrectly(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	ctx, teardown := stream.WithEffectHandler[int](ctx, 32)
@@ -319,7 +319,7 @@ func TestStreamEffect_OrderByStreamPayload_SortsCorrectly(t *testing.T) {
 
 func TestStreamEffect_MergeStreamPayload_DoubleClose(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	ctx, teardown := stream.WithEffectHandler[int](ctx, 32)

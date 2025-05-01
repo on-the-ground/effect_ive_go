@@ -8,7 +8,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-func WithTestLogEffectHandler(
+func WithTestEffectHandler(
 	ctx context.Context,
 ) (context.Context, func() context.Context) {
 	consoleCore := zapcore.NewCore(

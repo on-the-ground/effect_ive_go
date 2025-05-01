@@ -14,7 +14,7 @@ import (
 
 func TestConcurrencyEffect_AllChildrenRunAndComplete(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -50,7 +50,7 @@ func TestConcurrencyEffect_AllChildrenRunAndComplete(t *testing.T) {
 
 func TestConcurrencyEffect_ContextCancelPropagatesToChildren(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -82,7 +82,7 @@ func TestConcurrencyEffect_ContextCancelPropagatesToChildren(t *testing.T) {
 
 func TestConcurrencyEffect_HandlesPanicsGracefully(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	ctx, endOfConcurrencyHandler := concurrency.WithEffectHandler(ctx, 10)
@@ -107,7 +107,7 @@ func TestConcurrencyEffect_HandlesPanicsGracefully(t *testing.T) {
 
 func TestConcurrencyEffect_WaitsUntilAllChildrenFinish(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	ctx, endOfConcurrencyHandler := concurrency.WithEffectHandler(ctx, 10)
@@ -148,7 +148,7 @@ func TestConcurrencyEffect_WaitsUntilAllChildrenFinish(t *testing.T) {
 
 func TestConcurrencyEffect_SpawnsAndCleansUpAll(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	ctx, endOfConcurrencyHandler := concurrency.WithEffectHandler(ctx, 10)

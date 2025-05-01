@@ -15,7 +15,7 @@ import (
 func TestBindingEffect_BasicLookup(t *testing.T) {
 	ctx := context.Background()
 
-	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	ctx, closeFn := binding.WithEffectHandler(
@@ -38,7 +38,7 @@ func TestBindingEffect_BasicLookup(t *testing.T) {
 
 func TestBindingEffect_KeyNotFound(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 	ctx, closeFn := binding.WithEffectHandler(
 		ctx,
@@ -58,7 +58,7 @@ func TestBindingEffect_KeyNotFound(t *testing.T) {
 func TestBindingEffect_DelegatesToUpperScope(t *testing.T) {
 	ctx := context.Background()
 
-	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	upperCtx, upperClose := binding.WithEffectHandler(
@@ -90,7 +90,7 @@ func TestBindingEffect_DelegatesToUpperScope(t *testing.T) {
 func TestBindingEffect_ConcurrentPartitionedAccess(t *testing.T) {
 	ctx := context.Background()
 
-	ctx, endOfLogHandler := log.WithTestLogEffectHandler(ctx)
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
 	// prepare key-value map
