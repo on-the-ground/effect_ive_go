@@ -9,7 +9,7 @@ import (
 	"github.com/on-the-ground/effect_ive_go/shared/orderedbuffer"
 )
 
-type streamEffectPayload interface {
+type payload interface {
 	sealedStreamEffectPayload()
 }
 

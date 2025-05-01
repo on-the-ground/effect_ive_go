@@ -33,7 +33,7 @@ func TestStateEffect_BasicLookup(t *testing.T) {
 	)
 	defer closeFn()
 
-	v, err := state.StateEff(ctx, state.LoadStatePayload{Key: "foo"})
+	v, err := state.StateEff(ctx, state.Load{Key: "foo"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestStateEffect_KeyNotFound(t *testing.T) {
 	)
 	defer closeFn()
 
-	_, err := state.StateEff(ctx, state.LoadStatePayload{Key: "bar"})
+	_, err := state.StateEff(ctx, state.Load{Key: "bar"})
 	if err == nil || !strings.Contains(err.Error(), "key not found") {
 		t.Fatalf("expected key-not-found error, got: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestStateEffect_DelegatesToUpperScope(t *testing.T) {
 	)
 	defer lowerClose()
 
-	v, err := state.StateEff(lowerCtx, state.LoadStatePayload{Key: "upper"})
+	v, err := state.StateEff(lowerCtx, state.Load{Key: "upper"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestStateEffect_ConcurrentPartitionedAccess(t *testing.T) {
 			keyIdx := i % len(states) // deterministic but shuffled
 			key := fmt.Sprintf("key%d", keyIdx)
 
-			v, err := state.StateEff(ctx, state.LoadStatePayload{Key: key})
+			v, err := state.StateEff(ctx, state.Load{Key: key})
 			mu.Lock()
 			defer mu.Unlock()
 
@@ -199,12 +199,12 @@ func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 			key := fmt.Sprintf("key%d", i%10)
 
 			// Load current value
-			v, _ := state.StateEff(ctx, state.LoadStatePayload{Key: key})
+			v, _ := state.StateEff(ctx, state.Load{Key: key})
 
 			switch i % 4 {
 			case 0:
 				// Store unconditionally
-				_, err := state.StateEff(ctx, state.StoreStatePayload{
+				_, err := state.StateEff(ctx, state.Store{
 					Key: key,
 					New: i,
 				})
@@ -212,7 +212,7 @@ func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 
 			case 1:
 				// Compare and delete
-				deleted, err := state.StateEff(ctx, state.CompareAndDeleteStatePayload{
+				deleted, err := state.StateEff(ctx, state.CompareAndDelete{
 					Key: key,
 					Old: v,
 				})
@@ -222,7 +222,7 @@ func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 
 			case 2:
 				// Compare and swap
-				swapped, err := state.StateEff(ctx, state.CompareAndSwapStatePayload{
+				swapped, err := state.StateEff(ctx, state.CompareAndSwap{
 					Key: key,
 					Old: v,
 					New: fmt.Sprintf("val-%d", i),
@@ -233,7 +233,7 @@ func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 
 			case 3:
 				// Just load again to add read load
-				_, _ = state.StateEff(ctx, state.LoadStatePayload{Key: key})
+				_, _ = state.StateEff(ctx, state.Load{Key: key})
 			}
 		}(i)
 	}
@@ -263,7 +263,7 @@ func TestStateEffect_ContextTimeout(t *testing.T) {
 
 	time.Sleep(1 * time.Millisecond) // allow timeout to occur
 
-	res, err := state.StateEff(timeoutCtx, state.LoadStatePayload{Key: "any"})
+	res, err := state.StateEff(timeoutCtx, state.Load{Key: "any"})
 	log.LogEff(ctx, log.LogInfo, "final result", map[string]interface{}{
 		"res": res,
 		"err": err,
@@ -286,14 +286,14 @@ func TestStateEffect_SetAndGet(t *testing.T) {
 	)
 	defer cancel()
 
-	old, _ := state.StateEff(ctx, state.LoadStatePayload{Key: "foo"})
-	state.StateEff(ctx, state.StoreStatePayload{Key: "foo", New: (777)})
+	old, _ := state.StateEff(ctx, state.Load{Key: "foo"})
+	state.StateEff(ctx, state.Store{Key: "foo", New: (777)})
 	defer log.LogEff(ctx, log.LogInfo, "swapped", map[string]any{
 		"old": old,
 		"new": 777,
 	})
 
-	v, err := state.StateEff(ctx, state.LoadStatePayload{Key: "foo"})
+	v, err := state.StateEff(ctx, state.Load{Key: "foo"})
 	assert.NoError(t, err)
 	assert.Equal(t, v, 777)
 }
@@ -316,16 +316,16 @@ func TestStateEffect_SourcePayloadReturnsSink(t *testing.T) {
 	defer end()
 
 	// 1. Get sink channel from SourceStatePayload
-	chVal, err := state.StateEff(ctx, state.SourceStatePayload{})
+	chVal, err := state.StateEff(ctx, state.Source{})
 	require.NoError(t, err)
 
-	sink, ok := chVal.(chan state.TimeBoundedStatePayload)
+	sink, ok := chVal.(chan state.TimeBoundedPayload)
 	require.True(t, ok, "expected sink channel from SourceStatePayload")
 
 	// 2. Send a StoreStatePayload
 	key := "test-key"
 	newVal := "new-value"
-	_, err = state.StateEff(ctx, state.StoreStatePayload{
+	_, err = state.StateEff(ctx, state.Store{
 		Key: key,
 		New: newVal,
 	})
@@ -334,7 +334,7 @@ func TestStateEffect_SourcePayloadReturnsSink(t *testing.T) {
 	// 3. Check the sink channel for the StoreStatePayload
 	select {
 	case payload := <-sink:
-		storePayload, ok := payload.StatePayload.(state.StoreStatePayload)
+		storePayload, ok := payload.Payload.(state.Store)
 		require.True(t, ok)
 		assert.Equal(t, storePayload.Key, key)
 		assert.Equal(t, storePayload.New, newVal)
@@ -344,7 +344,7 @@ func TestStateEffect_SourcePayloadReturnsSink(t *testing.T) {
 
 	// 4. Send a CompareAndDeleteStatePayload
 	oldVal := "new-value"
-	_, err = state.StateEff(ctx, state.CompareAndDeleteStatePayload{
+	_, err = state.StateEff(ctx, state.CompareAndDelete{
 		Key: key,
 		Old: oldVal,
 	})
@@ -353,7 +353,7 @@ func TestStateEffect_SourcePayloadReturnsSink(t *testing.T) {
 	// 5. Check the sink channel for the CompareAndDeleteStatePayload
 	select {
 	case payload := <-sink:
-		storePayload, ok := payload.StatePayload.(state.CompareAndDeleteStatePayload)
+		storePayload, ok := payload.Payload.(state.CompareAndDelete)
 		require.True(t, ok)
 		assert.Equal(t, storePayload.Key, key)
 		assert.Equal(t, storePayload.Old, oldVal)
@@ -398,28 +398,28 @@ func TestStore_Delegation(t *testing.T) {
 	defer endOfTier0()
 
 	// Store should succeed in tier 0
-	_, err := state.StateEff(ctx0, state.StoreStatePayload{
+	_, err := state.StateEff(ctx0, state.Store{
 		Key: "x",
 		New: 2,
 	})
 	assert.NoError(t, err, "Store delegation failed")
 
 	// Confirm that new value is set
-	val, err := state.StateEff(ctx0, state.LoadStatePayload{
+	val, err := state.StateEff(ctx0, state.Load{
 		Key: "x",
 	})
 	assert.NoError(t, err, "Load failed")
 	assert.Equal(t, val.(int), 2, "Expected x=2")
 
 	// Confirm that new value is set
-	val, err = state.StateEff(ctx1, state.LoadStatePayload{
+	val, err = state.StateEff(ctx1, state.Load{
 		Key: "x",
 	})
 	assert.NoError(t, err, "Load failed")
 	assert.Equal(t, val.(int), 2, "Expected x=2")
 
 	// Confirm that prev value is set
-	_, err = state.StateEff(ctx2, state.LoadStatePayload{
+	_, err = state.StateEff(ctx2, state.Load{
 		Key: "x",
 	})
 	assert.ErrorIs(t, err, state.ErrNoSuchKey, "should be no such key")
@@ -467,7 +467,7 @@ func TestCompareAndSwap_Delegation(t *testing.T) {
 	defer endOfTier0()
 
 	// CAS should succeed in tier 0
-	ok, err := state.StateEff(ctx0, state.CompareAndSwapStatePayload{
+	ok, err := state.StateEff(ctx0, state.CompareAndSwap{
 		Key: "x",
 		Old: 1,
 		New: 2,
@@ -476,21 +476,21 @@ func TestCompareAndSwap_Delegation(t *testing.T) {
 	assert.True(t, ok.(bool), "CAS delegation returned false, expected true")
 
 	// Confirm that new value is set
-	val, err := state.StateEff(ctx0, state.LoadStatePayload{
+	val, err := state.StateEff(ctx0, state.Load{
 		Key: "x",
 	})
 	assert.NoError(t, err, "Load failed")
 	assert.Equal(t, val.(int), 2, "Expected x=2")
 
 	// Confirm that new value is set
-	val, err = state.StateEff(ctx1, state.LoadStatePayload{
+	val, err = state.StateEff(ctx1, state.Load{
 		Key: "x",
 	})
 	assert.NoError(t, err, "Load failed")
 	assert.Equal(t, val.(int), 2, "Expected x=2")
 
 	// Confirm that prev value is set
-	val, err = state.StateEff(ctx2, state.LoadStatePayload{
+	val, err = state.StateEff(ctx2, state.Load{
 		Key: "x",
 	})
 	assert.NoError(t, err, "Load failed")
@@ -539,7 +539,7 @@ func TestCompareAndDelete_Delegation(t *testing.T) {
 	defer endOfTier0()
 
 	// CAD should succeed in tier 0
-	ok, err := state.StateEff(ctx0, state.CompareAndDeleteStatePayload{
+	ok, err := state.StateEff(ctx0, state.CompareAndDelete{
 		Key: "y",
 		Old: 99,
 	})
@@ -547,7 +547,7 @@ func TestCompareAndDelete_Delegation(t *testing.T) {
 	assert.True(t, ok.(bool), "CAD delegation returned false, expected true")
 
 	// Confirm that prev value is set
-	val, err := state.StateEff(ctx2, state.LoadStatePayload{
+	val, err := state.StateEff(ctx2, state.Load{
 		Key: "y",
 	})
 	assert.NoError(t, err, "Load failed")
