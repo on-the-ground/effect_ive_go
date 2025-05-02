@@ -34,7 +34,7 @@ func WithEffectHandler[K comparable, V comparable](
 		delegation: delegation,
 	}
 	for k, v := range initMap {
-		stateHandler.stateRepo.Store(k, v)
+		stateHandler.store(k, v)
 	}
 	return effects.WithResumablePartitionableEffectHandler(
 		ctx,
@@ -94,6 +94,79 @@ type stateHandler[K comparable, V comparable] struct {
 	delegation bool
 }
 
+func (sH stateHandler[K, V]) compareAndSwap(k K, old, new V) bool {
+	return matchRepo(sH.stateRepo,
+		func(repo casRepo) bool {
+			return repo.CompareAndSwap(k, old, new)
+		},
+		func(repo setRepo) bool {
+			if cur, ok := repo.Get(k); !ok {
+				return false
+			} else if cur != old {
+				return false
+			} else {
+				repo.Set(k, new)
+				return true
+			}
+		},
+	)
+}
+
+func (sH stateHandler[K, V]) compareAndDelete(k K, old V) bool {
+	return matchRepo(sH.stateRepo,
+		func(repo casRepo) bool {
+			return repo.CompareAndDelete(k, old)
+		},
+		func(repo setRepo) bool {
+			if cur, ok := repo.Get(k); !ok {
+				return false
+			} else if cur != old {
+				return false
+			} else {
+				repo.Delete(k)
+				return true
+			}
+		},
+	)
+}
+
+func (sH stateHandler[K, V]) store(k K, v V) {
+	matchRepo(sH.stateRepo,
+		func(repo casRepo) any {
+			repo.Store(k, v)
+			return struct{}{}
+		},
+		func(repo setRepo) any {
+			repo.Set(k, v)
+			return struct{}{}
+		},
+	)
+}
+
+func (sH stateHandler[K, V]) load(k K) (V, bool) {
+	type res struct {
+		v  V
+		ok bool
+	}
+	ret := matchRepo(sH.stateRepo,
+		func(repo casRepo) res {
+			v, ok := repo.Load(k)
+			if !ok {
+				return res{v: *new(V), ok: false}
+			}
+			return res{v: v.(V), ok: ok}
+		},
+		func(repo setRepo) res {
+			v, ok := repo.Get(k)
+			if !ok {
+				return res{v: *new(V), ok: false}
+			}
+			return res{v: v.(V), ok: ok}
+		},
+	)
+	return ret.v, ret.ok
+}
+
 // handle routes the given payload to the appropriate state operation logic.
 func (sH stateHandler[K, V]) handle(ctx context.Context, payload Payload) (res any, err error) {
 	switch payload := payload.(type) {
@@ -110,7 +183,7 @@ func (sH stateHandler[K, V]) handle(ctx context.Context, payload Payload) (res a
 				res = res.(bool) || dres.(bool)
 			}()
 		}
-		if swapped := sH.stateRepo.CompareAndSwap(payload.Key, payload.Old, payload.New); !swapped {
+		if swapped := sH.compareAndSwap(payload.Key, payload.Old, payload.New); !swapped {
 			res = false
 			err = nil
 			return
@@ -136,7 +209,7 @@ func (sH stateHandler[K, V]) handle(ctx context.Context, payload Payload) (res a
 				res = res.(bool) || dres.(bool)
 			}()
 		}
-		if deleted := sH.stateRepo.CompareAndDelete(payload.Key, payload.Old); !deleted {
+		if deleted := sH.compareAndDelete(payload.Key, payload.Old); !deleted {
 			res = false
 			err = nil
 			return
@@ -161,7 +234,7 @@ func (sH stateHandler[K, V]) handle(ctx context.Context, payload Payload) (res a
 				delegateStateEffect(ctx, payload)
 			}()
 		}
-		sH.stateRepo.Store(payload.Key, payload.New)
+		sH.store(payload.Key, payload.New)
 		payloadWithTimeSpan := statePayloadWithNow(payload)
 		concurrency.Effect(ctx, func(ctx context.Context) {
 			select {
@@ -173,7 +246,7 @@ func (sH stateHandler[K, V]) handle(ctx context.Context, payload Payload) (res a
 		return nil, nil
 
 	case Load[K]:
-		v, ok := sH.stateRepo.Load(payload.Key)
+		v, ok := sH.load(payload.Key)
 		if ok {
 			return v, nil
 		}
