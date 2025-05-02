@@ -19,16 +19,16 @@ import (
 // The teardown function should be called when the effect handler is no longer needed.
 // If the teardown function is called early, the effect handler will be closed.
 // The context returned by the teardown function should be used for further operations.
-func WithEffectHandler(
+func WithEffectHandler[K comparable, V comparable](
 	ctx context.Context,
 	config effectmodel.EffectScopeConfig,
 	delegation bool,
 	stateRepo StateRepo,
-	initMap map[string]any,
+	initMap map[K]V,
 ) (context.Context, func() context.Context) {
 	ctx, endOfConcurrency := concurrency.WithEffectHandler(ctx, config.BufferSize)
 	sink := make(chan TimeBoundedPayload, 2*config.NumWorkers)
-	stateHandler := &stateHandler{
+	stateHandler := &stateHandler[K, V]{
 		stateRepo:  stateRepo,
 		sink:       sink,
 		delegation: delegation,
@@ -88,17 +88,17 @@ func delegateStateEffect(upperCtx context.Context, payload Payload) (res any, er
 
 // stateHandler defines the in-memory state store logic.
 // It supports safe concurrent access and fallback to upstream handler if key is missing.
-type stateHandler struct {
+type stateHandler[K comparable, V comparable] struct {
 	stateRepo  StateRepo
 	sink       chan TimeBoundedPayload
 	delegation bool
 }
 
 // handle routes the given payload to the appropriate state operation logic.
-func (sH stateHandler) handle(ctx context.Context, payload Payload) (res any, err error) {
+func (sH stateHandler[K, V]) handle(ctx context.Context, payload Payload) (res any, err error) {
 	switch payload := payload.(type) {
 
-	case CompareAndSwap:
+	case CompareAndSwap[K, V]:
 		if payload.Old == payload.New {
 			res = true
 			err = nil
@@ -129,7 +129,7 @@ func (sH stateHandler) handle(ctx context.Context, payload Payload) (res any, er
 		err = nil
 		return
 
-	case CompareAndDelete:
+	case CompareAndDelete[K, V]:
 		if sH.delegation {
 			defer func() {
 				dres, _ := delegateStateEffect(ctx, payload)
@@ -155,7 +155,7 @@ func (sH stateHandler) handle(ctx context.Context, payload Payload) (res any, er
 		err = nil
 		return
 
-	case Store:
+	case Store[K, V]:
 		if sH.delegation {
 			defer func() {
 				delegateStateEffect(ctx, payload)
@@ -172,7 +172,7 @@ func (sH stateHandler) handle(ctx context.Context, payload Payload) (res any, er
 		})
 		return nil, nil
 
-	case Load:
+	case Load[K]:
 		v, ok := sH.stateRepo.Load(payload.Key)
 		if ok {
 			return v, nil

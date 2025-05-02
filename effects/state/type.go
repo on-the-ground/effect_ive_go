@@ -10,56 +10,66 @@ type Source struct{}
 func (Source) PartitionKey() string         { return "" }
 func (Source) sealedInterfaceStatePayload() {}
 
-var _ Payload = Load{}
-
 // Load is the payload type for retrieving a value from the state.
-type Load struct {
-	Key any // should be comparable
+type Load[K comparable] struct {
+	Key K // should be comparable
+}
+
+func NewLoad[K comparable](k K) Payload {
+	return Load[K]{Key: k}
 }
 
 // PartitionKey returns the partition key for routing this payload.
-func (p Load) PartitionKey() string {
+func (p Load[K]) PartitionKey() string {
 	return fmt.Sprintf("%v", p.Key)
 }
 
 // sealedInterfaceStatePayload prevents external packages from implementing statePayload.
-func (p Load) sealedInterfaceStatePayload() {}
-
-var _ Payload = CompareAndDelete{}
+func (p Load[K]) sealedInterfaceStatePayload() {}
 
 // CompareAndDelete is the payload type for deleting a key from the state.
-type CompareAndDelete struct {
-	Key any // should be comparable
-	Old any // should be comparable
+type CompareAndDelete[K, V comparable] struct {
+	Key K // should be comparable
+	Old V // should be comparable
 }
 
-func (p CompareAndDelete) PartitionKey() string {
+func NewCompareAndDelete[K, V comparable](k K, v V) Payload {
+	return CompareAndDelete[K, V]{Key: k, Old: v}
+}
+
+func (p CompareAndDelete[K, V]) PartitionKey() string {
 	return fmt.Sprintf("%v", p.Key)
 }
-func (p CompareAndDelete) sealedInterfaceStatePayload() {}
-
-var _ Payload = Store{}
+func (p CompareAndDelete[K, V]) sealedInterfaceStatePayload() {}
 
 // Store is the payload type for deleting a key from the state.
-type Store struct {
-	Key any // should be comparable
-	New any // should be comparable
+type Store[K, V comparable] struct {
+	Key K // should be comparable
+	New V // should be comparable
 }
 
-func (p Store) PartitionKey() string {
+func NewStore[K, V comparable](k K, v V) Payload {
+	return Store[K, V]{Key: k, New: v}
+}
+
+func (p Store[K, V]) PartitionKey() string {
 	return fmt.Sprintf("%v", p.Key)
 }
-func (p Store) sealedInterfaceStatePayload() {}
+func (p Store[K, V]) sealedInterfaceStatePayload() {}
 
 // CompareAndSwap is the payload type for inserting or updating a key-value pair.
-type CompareAndSwap struct {
-	Key any // should be comparable
-	New any // should be comparable
-	Old any // should be comparable
+type CompareAndSwap[K comparable, V comparable] struct {
+	Key K // should be comparable
+	New V // should be comparable
+	Old V // should be comparable
 }
 
-func (p CompareAndSwap) PartitionKey() string         { return fmt.Sprintf("%v", p.Key) }
-func (p CompareAndSwap) sealedInterfaceStatePayload() {}
+func NewCompareAndSwap[K, V comparable](k K, old, new V) Payload {
+	return CompareAndSwap[K, V]{Key: k, Old: old, New: new}
+}
+
+func (p CompareAndSwap[K, V]) PartitionKey() string         { return fmt.Sprintf("%v", p.Key) }
+func (p CompareAndSwap[K, V]) sealedInterfaceStatePayload() {}
 
 // Payload is a sealed interface for state operations.
 // Only predefined payload types (Set, Get, Delete) can implement this interface.
@@ -73,4 +83,10 @@ type StateRepo interface {
 	Store(key, value any)
 	CompareAndSwap(key, old, new any) (swapped bool)
 	CompareAndDelete(key, old any) (deleted bool)
+}
+
+type StateRepo2 interface {
+	Get(key any) (value any, ok bool)
+	Set(key, value any)
+	Delete(key, old any)
 }
