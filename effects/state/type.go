@@ -10,22 +10,22 @@ type Source struct{}
 func (Source) PartitionKey() string { return "" }
 func (Source) payload()             {}
 
-// Load is the payload type for retrieving a value from the state.
-type Load[K comparable] struct {
+// load is the payload type for retrieving a value from the state.
+type load[K comparable] struct {
 	Key K // should be comparable
 }
 
-func NewLoad[K comparable](k K) Payload {
-	return Load[K]{Key: k}
+func LoadPayloadOf[K comparable](k K) Payload {
+	return load[K]{Key: k}
 }
 
 // PartitionKey returns the partition key for routing this payload.
-func (p Load[K]) PartitionKey() string {
+func (p load[K]) PartitionKey() string {
 	return fmt.Sprintf("%v", p.Key)
 }
 
 // payload prevents external packages from implementing statePayload.
-func (p Load[K]) payload() {}
+func (p load[K]) payload() {}
 
 // CompareAndDelete is the payload type for deleting a key from the state.
 type CompareAndDelete[K, V comparable] struct {
@@ -33,7 +33,7 @@ type CompareAndDelete[K, V comparable] struct {
 	Old V // should be comparable
 }
 
-func NewCompareAndDelete[K, V comparable](k K, v V) Payload {
+func CADPayloadOf[K, V comparable](k K, v V) Payload {
 	return CompareAndDelete[K, V]{Key: k, Old: v}
 }
 
@@ -42,20 +42,20 @@ func (p CompareAndDelete[K, V]) PartitionKey() string {
 }
 func (p CompareAndDelete[K, V]) payload() {}
 
-// Store is the payload type for deleting a key from the state.
-type Store[K, V comparable] struct {
+// InsertIfAbsent is the payload type for deleting a key from the state.
+type InsertIfAbsent[K, V comparable] struct {
 	Key K // should be comparable
 	New V // should be comparable
 }
 
-func NewStore[K, V comparable](k K, v V) Payload {
-	return Store[K, V]{Key: k, New: v}
+func InsertPayloadOf[K, V comparable](k K, v V) Payload {
+	return InsertIfAbsent[K, V]{Key: k, New: v}
 }
 
-func (p Store[K, V]) PartitionKey() string {
+func (p InsertIfAbsent[K, V]) PartitionKey() string {
 	return fmt.Sprintf("%v", p.Key)
 }
-func (p Store[K, V]) payload() {}
+func (p InsertIfAbsent[K, V]) payload() {}
 
 // CompareAndSwap is the payload type for inserting or updating a key-value pair.
 type CompareAndSwap[K comparable, V comparable] struct {
@@ -64,7 +64,7 @@ type CompareAndSwap[K comparable, V comparable] struct {
 	Old V // should be comparable
 }
 
-func NewCompareAndSwap[K, V comparable](k K, old, new V) Payload {
+func CASPayloadOf[K, V comparable](k K, old, new V) Payload {
 	return CompareAndSwap[K, V]{Key: k, Old: old, New: new}
 }
 
@@ -85,7 +85,7 @@ type StateRepo interface {
 
 type CasRepo interface {
 	Load(key any) (value any, ok bool)
-	Store(key, value any)
+	InsertIfAbsent(key, value any) (inserted bool)
 	CompareAndSwap(key, old, new any) (swapped bool)
 	CompareAndDelete(key, old any) (deleted bool)
 }

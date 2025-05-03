@@ -34,7 +34,7 @@ func WithEffectHandler[K comparable, V comparable](
 		delegation: delegation,
 	}
 	for k, v := range initMap {
-		stateHandler.store(k, v)
+		stateHandler.insertIfAbsent(k, v)
 	}
 	return effects.WithResumablePartitionableEffectHandler(
 		ctx,
@@ -130,10 +130,10 @@ func (sH stateHandler[K, V]) compareAndDelete(k K, old V) bool {
 	)
 }
 
-func (sH stateHandler[K, V]) store(k K, v V) {
+func (sH stateHandler[K, V]) insertIfAbsent(k K, v V) {
 	matchRepo(sH.stateRepo,
 		func(repo casRepo) any {
-			repo.Store(k, v)
+			repo.InsertIfAbsent(k, v)
 			return struct{}{}
 		},
 		func(repo setRepo) any {
@@ -228,13 +228,13 @@ func (sH stateHandler[K, V]) handle(ctx context.Context, payload Payload) (res a
 		err = nil
 		return
 
-	case Store[K, V]:
+	case InsertIfAbsent[K, V]:
 		if sH.delegation {
 			defer func() {
 				delegateStateEffect(ctx, payload)
 			}()
 		}
-		sH.store(payload.Key, payload.New)
+		sH.insertIfAbsent(payload.Key, payload.New)
 		payloadWithTimeSpan := statePayloadWithNow(payload)
 		concurrency.Effect(ctx, func(ctx context.Context) {
 			select {
@@ -245,7 +245,7 @@ func (sH stateHandler[K, V]) handle(ctx context.Context, payload Payload) (res a
 		})
 		return nil, nil
 
-	case Load[K]:
+	case load[K]:
 		v, ok := sH.load(payload.Key)
 		if ok {
 			return v, nil
