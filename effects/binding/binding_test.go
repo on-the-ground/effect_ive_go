@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/on-the-ground/effect_ive_go/effects/binding"
-	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 	"github.com/on-the-ground/effect_ive_go/effects/log"
 )
 
@@ -20,7 +19,7 @@ func TestBindingEffect_BasicLookup(t *testing.T) {
 
 	ctx, closeFn := binding.WithEffectHandler(
 		ctx,
-		effectmodel.NewEffectScopeConfig(1, 1),
+		1, 1,
 		map[string]any{
 			"foo": 123,
 		},
@@ -42,7 +41,7 @@ func TestBindingEffect_KeyNotFound(t *testing.T) {
 	defer endOfLogHandler()
 	ctx, closeFn := binding.WithEffectHandler(
 		ctx,
-		effectmodel.NewEffectScopeConfig(1, 1),
+		1, 1,
 		map[string]any{
 			"foo": 123,
 		},
@@ -63,7 +62,7 @@ func TestBindingEffect_DelegatesToUpperScope(t *testing.T) {
 
 	upperCtx, upperClose := binding.WithEffectHandler(
 		ctx,
-		effectmodel.NewEffectScopeConfig(1, 1),
+		1, 1,
 		map[string]any{
 			"upper": "delegated",
 		},
@@ -73,7 +72,7 @@ func TestBindingEffect_DelegatesToUpperScope(t *testing.T) {
 	lowerCtx := context.WithValue(upperCtx, "dummy", 1)
 	lowerCtx, lowerClose := binding.WithEffectHandler(
 		lowerCtx,
-		effectmodel.NewEffectScopeConfig(1, 1),
+		1, 1,
 		nil,
 	)
 	defer lowerClose()
@@ -101,7 +100,7 @@ func TestBindingEffect_ConcurrentPartitionedAccess(t *testing.T) {
 	}
 
 	// register the binding handler with partitioning
-	ctx, cancel := binding.WithEffectHandler(ctx, effectmodel.NewEffectScopeConfig(10, 10), bindings)
+	ctx, cancel := binding.WithEffectHandler(ctx, 10, 10, bindings)
 	defer cancel()
 
 	var (

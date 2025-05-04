@@ -31,15 +31,16 @@ func (bp Payload) PartitionKey() string {
 //     you should use the context returned by the teardown function.
 func WithEffectHandler(
 	ctx context.Context,
-	config effectmodel.EffectScopeConfig,
+	bufferSize int,
+	numWorkers int,
 	bindingMap map[string]any,
 ) (context.Context, func() context.Context) {
 	bindingHandler := &bindingHandler{
 		bindingMap: normalizeBindingMap(bindingMap),
 	}
-	return effects.WithResumablePartitionableEffectHandler[Payload, any](
+	return effects.WithResumablePartitionableEffectHandler(
 		ctx,
-		config,
+		effectmodel.NewEffectScopeConfig(bufferSize, numWorkers),
 		effectmodel.EffectBinding,
 		bindingHandler.handle,
 	)

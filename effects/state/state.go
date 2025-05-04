@@ -19,15 +19,15 @@ import (
 // The teardown function should be called when the effect handler is no longer needed.
 // If the teardown function is called early, the effect handler will be closed.
 // The context returned by the teardown function should be used for further operations.
-func WithEffectHandler[K comparable, V comparable](
+func WithEffectHandler[K comparable, V ComparableEquatable](
 	ctx context.Context,
-	config effectmodel.EffectScopeConfig,
+	bufferSize, numWorkers int,
 	delegation bool,
 	stateRepo StateRepo,
 	initMap map[K]V,
 ) (context.Context, func() context.Context) {
-	ctx, endOfConcurrency := concurrency.WithEffectHandler(ctx, config.BufferSize)
-	sink := make(chan TimeBoundedPayload, 2*config.NumWorkers)
+	ctx, endOfConcurrency := concurrency.WithEffectHandler(ctx, bufferSize)
+	sink := make(chan TimeBoundedPayload, 2*numWorkers)
 	stateHandler := &stateHandler[K, V]{
 		stateRepo:  stateRepo,
 		sink:       sink,
@@ -38,7 +38,7 @@ func WithEffectHandler[K comparable, V comparable](
 	}
 	return effects.WithResumablePartitionableEffectHandler(
 		ctx,
-		config,
+		effectmodel.NewEffectScopeConfig(bufferSize, numWorkers),
 		effectmodel.EffectState,
 		stateHandler.handle,
 		func() {
@@ -88,7 +88,7 @@ func delegateStateEffect(upperCtx context.Context, payload Payload) (res any, er
 
 // stateHandler defines the in-memory state store logic.
 // It supports safe concurrent access and fallback to upstream handler if key is missing.
-type stateHandler[K comparable, V comparable] struct {
+type stateHandler[K comparable, V ComparableEquatable] struct {
 	stateRepo  StateRepo
 	sink       chan TimeBoundedPayload
 	delegation bool
@@ -96,13 +96,13 @@ type stateHandler[K comparable, V comparable] struct {
 
 func (sH stateHandler[K, V]) compareAndSwap(k K, old, new V) bool {
 	return matchRepo(sH.stateRepo,
-		func(repo casRepo) bool {
+		func(repo casRepo[K]) bool {
 			return repo.CompareAndSwap(k, old, new)
 		},
-		func(repo setRepo) bool {
+		func(repo setRepo[K]) bool {
 			if cur, ok := repo.Get(k); !ok {
 				return false
-			} else if cur != old {
+			} else if Equals(cur, old) {
 				return false
 			} else {
 				repo.Set(k, new)
@@ -114,13 +114,13 @@ func (sH stateHandler[K, V]) compareAndSwap(k K, old, new V) bool {
 
 func (sH stateHandler[K, V]) compareAndDelete(k K, old V) bool {
 	return matchRepo(sH.stateRepo,
-		func(repo casRepo) bool {
+		func(repo casRepo[K]) bool {
 			return repo.CompareAndDelete(k, old)
 		},
-		func(repo setRepo) bool {
+		func(repo setRepo[K]) bool {
 			if cur, ok := repo.Get(k); !ok {
 				return false
-			} else if cur != old {
+			} else if Equals(cur, old) {
 				return false
 			} else {
 				repo.Delete(k)
@@ -132,11 +132,11 @@ func (sH stateHandler[K, V]) compareAndDelete(k K, old V) bool {
 
 func (sH stateHandler[K, V]) insertIfAbsent(k K, v V) {
 	matchRepo(sH.stateRepo,
-		func(repo casRepo) any {
+		func(repo casRepo[K]) any {
 			repo.InsertIfAbsent(k, v)
 			return struct{}{}
 		},
-		func(repo setRepo) any {
+		func(repo setRepo[K]) any {
 			repo.Set(k, v)
 			return struct{}{}
 		},
@@ -149,14 +149,14 @@ func (sH stateHandler[K, V]) load(k K) (V, bool) {
 		ok bool
 	}
 	ret := matchRepo(sH.stateRepo,
-		func(repo casRepo) res {
+		func(repo casRepo[K]) res {
 			v, ok := repo.Load(k)
 			if !ok {
 				return res{v: *new(V), ok: false}
 			}
 			return res{v: v.(V), ok: ok}
 		},
-		func(repo setRepo) res {
+		func(repo setRepo[K]) res {
 			v, ok := repo.Get(k)
 			if !ok {
 				return res{v: *new(V), ok: false}
@@ -172,7 +172,7 @@ func (sH stateHandler[K, V]) handle(ctx context.Context, payload Payload) (res a
 	switch payload := payload.(type) {
 
 	case CompareAndSwap[K, V]:
-		if payload.Old == payload.New {
+		if Equals(payload.Old, payload.New) {
 			res = true
 			err = nil
 			return

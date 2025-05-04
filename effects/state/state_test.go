@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 	"github.com/on-the-ground/effect_ive_go/effects/log"
 	"github.com/on-the-ground/effect_ive_go/effects/state"
 
@@ -16,35 +15,44 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var _ state.SetRepo = testSetRepo{Map: &sync.Map{}}
-
-type testSetRepo struct {
+type testSetRepo[K comparable] struct {
 	*sync.Map
 }
 
-func newTestSetRepo() state.StateRepo {
-	return state.NewSetRepo(testSetRepo{Map: &sync.Map{}})
+func newTestSetRepo[K comparable]() state.StateRepo {
+	return state.NewSetRepo(testSetRepo[K]{Map: &sync.Map{}})
 }
 
-func (t testSetRepo) Get(key any) (value any, ok bool) {
+func (t testSetRepo[K]) Get(key K) (value any, ok bool) {
 	return t.Load(key)
 }
 
-func (t testSetRepo) Set(key, value any) {
+func (t testSetRepo[K]) Set(key K, value any) {
 	t.Store(key, value)
 }
+func (t testSetRepo[K]) Delete(key K) {}
 
-var _ state.CasRepo = testCasRepo{Map: &sync.Map{}}
-
-type testCasRepo struct {
+type testCasRepo[K comparable] struct {
 	*sync.Map
 }
 
-func newTestCasRepo() state.StateRepo {
-	return state.NewCasRepo(testCasRepo{Map: &sync.Map{}})
+func (t testCasRepo[K]) CompareAndDelete(k K, old any) bool {
+	return t.Map.CompareAndDelete(k, old)
 }
 
-func (t testCasRepo) InsertIfAbsent(key, value any) (inserted bool) {
+func (t testCasRepo[K]) CompareAndSwap(k K, old, new any) bool {
+	return t.Map.CompareAndSwap(k, old, new)
+}
+
+func (t testCasRepo[K]) Load(k K) (any, bool) {
+	return t.Map.Load(k)
+}
+
+func newTestCasRepo[K comparable]() state.StateRepo {
+	return state.NewCasRepo(testCasRepo[K]{Map: &sync.Map{}})
+}
+
+func (t testCasRepo[K]) InsertIfAbsent(key K, value any) (inserted bool) {
 	_, loaded := t.LoadOrStore(key, value)
 	return !loaded
 }
@@ -58,7 +66,7 @@ func TestStateEffect_BasicLookup(t *testing.T) {
 	testFn := func(repo state.StateRepo) {
 		ctx, endOfStateHandler := state.WithEffectHandler(
 			ctx,
-			effectmodel.NewEffectScopeConfig(1, 1),
+			1, 1,
 			false,
 			repo,
 			map[string]any{
@@ -77,8 +85,8 @@ func TestStateEffect_BasicLookup(t *testing.T) {
 	}
 
 	for _, repo := range []state.StateRepo{
-		newTestCasRepo(),
-		newTestSetRepo(),
+		newTestCasRepo[string](),
+		newTestSetRepo[string](),
 	} {
 		testFn(repo)
 	}
@@ -92,7 +100,7 @@ func TestStateEffect_KeyNotFound(t *testing.T) {
 	testFn := func(repo state.StateRepo) {
 		ctx, endOfStateHandler := state.WithEffectHandler(
 			ctx,
-			effectmodel.NewEffectScopeConfig(1, 1),
+			1, 1,
 			false,
 			repo,
 			map[string]any{
@@ -108,8 +116,8 @@ func TestStateEffect_KeyNotFound(t *testing.T) {
 	}
 
 	for _, repo := range []state.StateRepo{
-		newTestCasRepo(),
-		newTestSetRepo(),
+		newTestCasRepo[string](),
+		newTestSetRepo[string](),
 	} {
 		testFn(repo)
 	}
@@ -124,7 +132,7 @@ func TestStateEffect_DelegatesToUpperScope(t *testing.T) {
 	testFn := func(repo state.StateRepo) {
 		upperCtx, upperClose := state.WithEffectHandler(
 			ctx,
-			effectmodel.NewEffectScopeConfig(1, 1),
+			1, 1,
 			false,
 			repo,
 			map[string]any{
@@ -136,7 +144,7 @@ func TestStateEffect_DelegatesToUpperScope(t *testing.T) {
 		lowerCtx := context.WithValue(upperCtx, "dummy", 1)
 		lowerCtx, lowerClose := state.WithEffectHandler[string, any](
 			lowerCtx,
-			effectmodel.NewEffectScopeConfig(1, 1),
+			1, 1,
 			true,
 			repo,
 			nil,
@@ -152,7 +160,7 @@ func TestStateEffect_DelegatesToUpperScope(t *testing.T) {
 		}
 	}
 
-	for _, repo := range []state.StateRepo{newTestCasRepo()} {
+	for _, repo := range []state.StateRepo{newTestCasRepo[string](), newTestSetRepo[string]()} {
 		testFn(repo)
 	}
 }
@@ -174,7 +182,7 @@ func TestStateEffect_ConcurrentPartitionedAccess(t *testing.T) {
 		// register the state handler with partitioning
 		ctx, endOfStateHandler := state.WithEffectHandler(
 			ctx,
-			effectmodel.NewEffectScopeConfig(10, 10),
+			10, 10,
 			false,
 			repo,
 			states,
@@ -233,7 +241,7 @@ func TestStateEffect_ConcurrentPartitionedAccess(t *testing.T) {
 		}
 	}
 
-	for _, repo := range []state.StateRepo{newTestCasRepo()} {
+	for _, repo := range []state.StateRepo{newTestCasRepo[string](), newTestSetRepo[string]()} {
 		testFn(repo)
 	}
 
@@ -247,7 +255,7 @@ func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 	testFn := func(repo state.StateRepo) {
 		ctx, endOfStateHandler := state.WithEffectHandler(
 			ctx,
-			effectmodel.NewEffectScopeConfig(8, 8),
+			8, 8,
 			false,
 			repo,
 			map[string]any{
@@ -301,7 +309,7 @@ func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 		wg.Wait()
 	}
 
-	for _, repo := range []state.StateRepo{newTestCasRepo()} {
+	for _, repo := range []state.StateRepo{newTestCasRepo[string](), newTestSetRepo[string]()} {
 		testFn(repo)
 	}
 }
@@ -314,7 +322,7 @@ func TestStateEffect_ContextTimeout(t *testing.T) {
 	testFn := func(repo state.StateRepo) {
 		ctx, endOfStateHandler := state.WithEffectHandler[string, any](
 			ctx,
-			effectmodel.NewEffectScopeConfig(1, 1),
+			1, 1,
 			false,
 			repo,
 			nil,
@@ -338,7 +346,7 @@ func TestStateEffect_ContextTimeout(t *testing.T) {
 		assert.ErrorIs(t, err, context.DeadlineExceeded)
 	}
 
-	for _, repo := range []state.StateRepo{newTestCasRepo()} {
+	for _, repo := range []state.StateRepo{newTestCasRepo[string](), newTestSetRepo[string]()} {
 		testFn(repo)
 	}
 
@@ -352,7 +360,7 @@ func TestStateEffect_SetAndGet(t *testing.T) {
 	testFn := func(repo state.StateRepo) {
 		ctx, endOfStateHandler := state.WithEffectHandler[string, int](
 			ctx,
-			effectmodel.NewEffectScopeConfig(1, 1),
+			1, 1,
 			false,
 			repo,
 			nil,
@@ -370,7 +378,7 @@ func TestStateEffect_SetAndGet(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
-	for _, repo := range []state.StateRepo{newTestCasRepo()} {
+	for _, repo := range []state.StateRepo{newTestCasRepo[string](), newTestSetRepo[string]()} {
 		testFn(repo)
 	}
 
@@ -387,7 +395,7 @@ func TestStateEffect_SourcePayloadReturnsSink(t *testing.T) {
 
 		ctx, endOfStateHandler := state.WithEffectHandler[string, string](
 			ctx,
-			effectmodel.NewEffectScopeConfig(8, 8),
+			8, 8,
 			false,
 			repo,
 			nil,
@@ -435,7 +443,10 @@ func TestStateEffect_SourcePayloadReturnsSink(t *testing.T) {
 		}
 	}
 
-	for _, repo := range []state.StateRepo{newTestCasRepo()} {
+	for _, repo := range []state.StateRepo{
+		newTestCasRepo[string](),
+		// todo newTestSetRepo[string](),
+	} {
 		testFn(repo)
 	}
 }
@@ -449,9 +460,9 @@ func TestStore_Delegation(t *testing.T) {
 		// Tier 2 - has key x=1
 		ctx2, endOfTier2 := state.WithEffectHandler(
 			ctx,
-			effectmodel.NewEffectScopeConfig(2, 2),
+			2, 2,
 			false,
-			newTestCasRepo(),
+			newTestCasRepo[string](),
 			map[string]int{},
 		)
 		defer endOfTier2()
@@ -459,9 +470,9 @@ func TestStore_Delegation(t *testing.T) {
 		// Tier 1 - has key x=1
 		ctx1, endOfTier1 := state.WithEffectHandler(
 			ctx2,
-			effectmodel.NewEffectScopeConfig(2, 2),
+			2, 2,
 			false,
-			newTestCasRepo(),
+			newTestCasRepo[string](),
 			map[string]int{},
 		)
 		defer endOfTier1()
@@ -469,7 +480,7 @@ func TestStore_Delegation(t *testing.T) {
 		// Tier 0 - has key x=1
 		ctx0, endOfTier0 := state.WithEffectHandler(
 			ctx1,
-			effectmodel.NewEffectScopeConfig(2, 2),
+			2, 2,
 			true,
 			repo,
 			map[string]int{},
@@ -495,7 +506,7 @@ func TestStore_Delegation(t *testing.T) {
 		assert.ErrorIs(t, err, state.ErrNoSuchKey, "should be no such key")
 	}
 
-	for _, repo := range []state.StateRepo{newTestCasRepo()} {
+	for _, repo := range []state.StateRepo{newTestCasRepo[string](), newTestSetRepo[string]()} {
 		testFn(repo)
 	}
 
@@ -510,9 +521,9 @@ func TestCompareAndSwap_Delegation(t *testing.T) {
 		// Tier 2 - has key x=1
 		ctx2, endOfTier2 := state.WithEffectHandler(
 			ctx,
-			effectmodel.NewEffectScopeConfig(2, 2),
+			2, 2,
 			false,
-			newTestCasRepo(),
+			newTestCasRepo[string](),
 			map[string]int{
 				"x": 1,
 			},
@@ -522,9 +533,9 @@ func TestCompareAndSwap_Delegation(t *testing.T) {
 		// Tier 1 - has key x=1
 		ctx1, endOfTier1 := state.WithEffectHandler(
 			ctx2,
-			effectmodel.NewEffectScopeConfig(2, 2),
+			2, 2,
 			false,
-			newTestCasRepo(),
+			newTestCasRepo[string](),
 			map[string]int{
 				"x": 1,
 			},
@@ -534,7 +545,7 @@ func TestCompareAndSwap_Delegation(t *testing.T) {
 		// Tier 0 - has key x=1
 		ctx0, endOfTier0 := state.WithEffectHandler(
 			ctx1,
-			effectmodel.NewEffectScopeConfig(2, 2),
+			2, 2,
 			true,
 			repo,
 			map[string]int{
@@ -564,7 +575,10 @@ func TestCompareAndSwap_Delegation(t *testing.T) {
 		assert.Equal(t, val.(int), 1, "Expected x=1")
 	}
 
-	for _, repo := range []state.StateRepo{newTestCasRepo()} {
+	for _, repo := range []state.StateRepo{
+		newTestCasRepo[string](),
+		// todo newTestSetRepo[string](),
+	} {
 		testFn(repo)
 	}
 
@@ -579,9 +593,9 @@ func TestCompareAndDelete_Delegation(t *testing.T) {
 		// Tier 2 - has key y=99
 		ctx2, endOfTier2 := state.WithEffectHandler(
 			ctx,
-			effectmodel.NewEffectScopeConfig(2, 2),
+			2, 2,
 			false,
-			newTestCasRepo(),
+			newTestCasRepo[string](),
 			map[string]int{
 				"y": 98,
 			},
@@ -591,9 +605,9 @@ func TestCompareAndDelete_Delegation(t *testing.T) {
 		// Tier 1 - has key y=99
 		ctx1, endOfTier1 := state.WithEffectHandler(
 			ctx2,
-			effectmodel.NewEffectScopeConfig(2, 2),
+			2, 2,
 			false,
-			newTestCasRepo(),
+			newTestCasRepo[string](),
 			map[string]int{
 				"y": 99,
 			},
@@ -603,7 +617,7 @@ func TestCompareAndDelete_Delegation(t *testing.T) {
 		// Tier 0 - has key y=99
 		ctx0, endOfTier0 := state.WithEffectHandler(
 			ctx1,
-			effectmodel.NewEffectScopeConfig(2, 2),
+			2, 2,
 			true,
 			repo,
 			map[string]int{
@@ -623,7 +637,7 @@ func TestCompareAndDelete_Delegation(t *testing.T) {
 		assert.Equal(t, val.(int), 98, "Expected y=99")
 	}
 
-	for _, repo := range []state.StateRepo{newTestCasRepo()} {
+	for _, repo := range []state.StateRepo{newTestCasRepo[string](), newTestSetRepo[string]()} {
 		testFn(repo)
 	}
 
