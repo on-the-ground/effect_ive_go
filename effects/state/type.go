@@ -1,6 +1,9 @@
 package state
 
-import "fmt"
+import (
+	"fmt"
+	"reflect"
+)
 
 var _ Payload = Source{}
 
@@ -28,12 +31,12 @@ func (p load[K]) PartitionKey() string {
 func (p load[K]) payload() {}
 
 // CompareAndDelete is the payload type for deleting a key from the state.
-type CompareAndDelete[K, V comparable] struct {
+type CompareAndDelete[K comparable, V ComparableEquatable] struct {
 	Key K // should be comparable
 	Old V // should be comparable
 }
 
-func CADPayloadOf[K, V comparable](k K, v V) Payload {
+func CADPayloadOf[K comparable, V ComparableEquatable](k K, v V) Payload {
 	return CompareAndDelete[K, V]{Key: k, Old: v}
 }
 
@@ -43,12 +46,12 @@ func (p CompareAndDelete[K, V]) PartitionKey() string {
 func (p CompareAndDelete[K, V]) payload() {}
 
 // InsertIfAbsent is the payload type for deleting a key from the state.
-type InsertIfAbsent[K, V comparable] struct {
+type InsertIfAbsent[K comparable, V ComparableEquatable] struct {
 	Key K // should be comparable
 	New V // should be comparable
 }
 
-func InsertPayloadOf[K, V comparable](k K, v V) Payload {
+func InsertPayloadOf[K comparable, V ComparableEquatable](k K, v V) Payload {
 	return InsertIfAbsent[K, V]{Key: k, New: v}
 }
 
@@ -58,13 +61,13 @@ func (p InsertIfAbsent[K, V]) PartitionKey() string {
 func (p InsertIfAbsent[K, V]) payload() {}
 
 // CompareAndSwap is the payload type for inserting or updating a key-value pair.
-type CompareAndSwap[K comparable, V comparable] struct {
+type CompareAndSwap[K comparable, V ComparableEquatable] struct {
 	Key K // should be comparable
 	New V // should be comparable
 	Old V // should be comparable
 }
 
-func CASPayloadOf[K, V comparable](k K, old, new V) Payload {
+func CASPayloadOf[K comparable, V ComparableEquatable](k K, old, new V) Payload {
 	return CompareAndSwap[K, V]{Key: k, Old: old, New: new}
 }
 
@@ -83,59 +86,80 @@ type StateRepo interface {
 	stateRepo()
 }
 
-type CasRepo interface {
-	Load(key any) (value any, ok bool)
-	InsertIfAbsent(key, value any) (inserted bool)
-	CompareAndSwap(key, old, new any) (swapped bool)
-	CompareAndDelete(key, old any) (deleted bool)
+type CasRepo[K comparable] interface {
+	Load(key K) (value any, ok bool)
+	InsertIfAbsent(key K, value any) (inserted bool)
+	CompareAndSwap(key K, old, new any) (swapped bool)
+	CompareAndDelete(key K, old any) (deleted bool)
 }
 
-type casRepo interface {
-	CasRepo
+type casRepo[K comparable] interface {
+	CasRepo[K]
 	stateRepo()
 }
 
-type casImpl struct {
-	CasRepo
+type casImpl[K comparable] struct {
+	CasRepo[K]
 }
 
-func (casImpl) stateRepo() {}
+func (casImpl[K]) stateRepo() {}
 
-func NewCasRepo(repo CasRepo) StateRepo {
-	return casImpl{CasRepo: repo}
+func NewCasRepo[K comparable](repo CasRepo[K]) StateRepo {
+	return casImpl[K]{CasRepo: repo}
 }
 
-type SetRepo interface {
-	Get(key any) (value any, ok bool)
-	Set(key, value any)
-	Delete(key any)
+type SetRepo[K comparable] interface {
+	Get(key K) (value any, ok bool)
+	Set(key K, value any)
+	Delete(key K)
 }
 
-type setRepo interface {
-	SetRepo
+type setRepo[K comparable] interface {
+	SetRepo[K]
 	stateRepo()
 }
 
-type setImpl struct {
-	SetRepo
+type setImpl[K comparable] struct {
+	SetRepo[K]
 }
 
-func (setImpl) stateRepo() {}
+func (setImpl[K]) stateRepo() {}
 
-func NewSetRepo(repo SetRepo) StateRepo {
-	return setImpl{SetRepo: repo}
+func NewSetRepo[K comparable](repo SetRepo[K]) StateRepo {
+	return setImpl[K]{SetRepo: repo}
 }
 
-func matchRepo[T any](
+func matchRepo[K comparable, T any](
 	repo StateRepo,
-	casCallback func(casRepo) T,
-	setCallback func(setRepo) T,
+	casCallback func(casRepo[K]) T,
+	setCallback func(setRepo[K]) T,
 ) T {
-	if casRepo, ok := repo.(casRepo); ok {
-		return casCallback(casRepo)
+	switch r := repo.(type) {
+	case casRepo[K]:
+		return casCallback(r)
+	case setRepo[K]:
+		return setCallback(r)
+	default:
+		panic(fmt.Sprintf("exhaustive match fallback, repo type: %T", repo))
 	}
-	if setRepo, ok := repo.(setRepo); ok {
-		return setCallback(setRepo)
+}
+
+type Equatable interface {
+	Equals(j any) bool
+}
+
+type ComparableEquatable interface{}
+
+func equalsComparable[T comparable](i, j T) bool {
+	return i == j
+}
+
+func Equals(i, j ComparableEquatable) bool {
+	if reflect.TypeOf(i) != reflect.TypeOf(j) {
+		return false
 	}
-	panic(fmt.Sprintf("exhaustive match fallback, repo type: %T", repo))
+	if i, ok := i.(Equatable); ok {
+		return i.Equals(j)
+	}
+	return equalsComparable(i, j)
 }
