@@ -23,13 +23,13 @@ func WithEffectHandler[K comparable, V ComparableEquatable](
 	ctx context.Context,
 	bufferSize, numWorkers int,
 	delegation bool,
-	stateRepo StateRepo,
+	stateStore StateStore,
 	initMap map[K]V,
 ) (context.Context, func() context.Context) {
 	ctx, endOfConcurrency := concurrency.WithEffectHandler(ctx, bufferSize)
 	sink := make(chan TimeBoundedPayload, 2*numWorkers)
 	stateHandler := &stateHandler[K, V]{
-		stateRepo:  stateRepo,
+		stateStore: stateStore,
 		sink:       sink,
 		delegation: delegation,
 	}
@@ -89,23 +89,23 @@ func delegateStateEffect(upperCtx context.Context, payload Payload) (res any, er
 // stateHandler defines the in-memory state store logic.
 // It supports safe concurrent access and fallback to upstream handler if key is missing.
 type stateHandler[K comparable, V ComparableEquatable] struct {
-	stateRepo  StateRepo
+	stateStore StateStore
 	sink       chan TimeBoundedPayload
 	delegation bool
 }
 
 func (sH stateHandler[K, V]) compareAndSwap(k K, old, new V) bool {
-	return matchRepo(sH.stateRepo,
-		func(repo casRepo[K]) bool {
-			return repo.CompareAndSwap(k, old, new)
+	return matchStore(sH.stateStore,
+		func(store casStore[K]) bool {
+			return store.CompareAndSwap(k, old, new)
 		},
-		func(repo setRepo[K]) bool {
-			if cur, ok := repo.Get(k); !ok {
+		func(store setStore[K]) bool {
+			if cur, ok := store.Get(k); !ok {
 				return false
 			} else if Equals(cur, old) {
 				return false
 			} else {
-				repo.Set(k, new)
+				store.Set(k, new)
 				return true
 			}
 		},
@@ -113,17 +113,17 @@ func (sH stateHandler[K, V]) compareAndSwap(k K, old, new V) bool {
 }
 
 func (sH stateHandler[K, V]) compareAndDelete(k K, old V) bool {
-	return matchRepo(sH.stateRepo,
-		func(repo casRepo[K]) bool {
-			return repo.CompareAndDelete(k, old)
+	return matchStore(sH.stateStore,
+		func(store casStore[K]) bool {
+			return store.CompareAndDelete(k, old)
 		},
-		func(repo setRepo[K]) bool {
-			if cur, ok := repo.Get(k); !ok {
+		func(store setStore[K]) bool {
+			if cur, ok := store.Get(k); !ok {
 				return false
 			} else if Equals(cur, old) {
 				return false
 			} else {
-				repo.Delete(k)
+				store.Delete(k)
 				return true
 			}
 		},
@@ -131,13 +131,13 @@ func (sH stateHandler[K, V]) compareAndDelete(k K, old V) bool {
 }
 
 func (sH stateHandler[K, V]) insertIfAbsent(k K, v V) {
-	matchRepo(sH.stateRepo,
-		func(repo casRepo[K]) any {
-			repo.InsertIfAbsent(k, v)
+	matchStore(sH.stateStore,
+		func(store casStore[K]) any {
+			store.InsertIfAbsent(k, v)
 			return struct{}{}
 		},
-		func(repo setRepo[K]) any {
-			repo.Set(k, v)
+		func(store setStore[K]) any {
+			store.Set(k, v)
 			return struct{}{}
 		},
 	)
@@ -148,16 +148,16 @@ func (sH stateHandler[K, V]) load(k K) (V, bool) {
 		v  V
 		ok bool
 	}
-	ret := matchRepo(sH.stateRepo,
-		func(repo casRepo[K]) res {
-			v, ok := repo.Load(k)
+	ret := matchStore(sH.stateStore,
+		func(store casStore[K]) res {
+			v, ok := store.Load(k)
 			if !ok {
 				return res{v: *new(V), ok: false}
 			}
 			return res{v: v.(V), ok: ok}
 		},
-		func(repo setRepo[K]) res {
-			v, ok := repo.Get(k)
+		func(store setStore[K]) res {
+			v, ok := store.Get(k)
 			if !ok {
 				return res{v: *new(V), ok: false}
 			}

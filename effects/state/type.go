@@ -81,66 +81,66 @@ type Payload interface {
 	payload()
 }
 
-type StateRepo interface {
-	// stateRepo is a marker method to prevent accidental implementation of StateRepo directly.
-	stateRepo()
+type StateStore interface {
+	// stateStore is a marker method to prevent accidental implementation of StateStore directly.
+	stateStore()
 }
 
-type CasRepo[K comparable] interface {
+type CasStore[K comparable] interface {
 	Load(key K) (value any, ok bool)
 	InsertIfAbsent(key K, value any) (inserted bool)
 	CompareAndSwap(key K, old, new any) (swapped bool)
 	CompareAndDelete(key K, old any) (deleted bool)
 }
 
-type casRepo[K comparable] interface {
-	CasRepo[K]
-	stateRepo()
+type casStore[K comparable] interface {
+	CasStore[K]
+	stateStore()
 }
 
 type casImpl[K comparable] struct {
-	CasRepo[K]
+	CasStore[K]
 }
 
-func (casImpl[K]) stateRepo() {}
+func (casImpl[K]) stateStore() {}
 
-func NewCasRepo[K comparable](repo CasRepo[K]) StateRepo {
-	return casImpl[K]{CasRepo: repo}
+func NewCasStore[K comparable](store CasStore[K]) StateStore {
+	return casImpl[K]{CasStore: store}
 }
 
-type SetRepo[K comparable] interface {
+type SetStore[K comparable] interface {
 	Get(key K) (value any, ok bool)
 	Set(key K, value any)
 	Delete(key K)
 }
 
-type setRepo[K comparable] interface {
-	SetRepo[K]
-	stateRepo()
+type setStore[K comparable] interface {
+	SetStore[K]
+	stateStore()
 }
 
 type setImpl[K comparable] struct {
-	SetRepo[K]
+	SetStore[K]
 }
 
-func (setImpl[K]) stateRepo() {}
+func (setImpl[K]) stateStore() {}
 
-func NewSetRepo[K comparable](repo SetRepo[K]) StateRepo {
-	return setImpl[K]{SetRepo: repo}
+func NewSetStore[K comparable](store SetStore[K]) StateStore {
+	return setImpl[K]{SetStore: store}
 }
 
-func matchRepo[K comparable, T any](
-	repo StateRepo,
-	casCallback func(casRepo[K]) T,
-	setCallback func(setRepo[K]) T,
+func matchStore[K comparable, T any](
+	store StateStore,
+	casCallback func(casStore[K]) T,
+	setCallback func(setStore[K]) T,
 ) T {
-	switch r := repo.(type) {
-	case casRepo[K]:
+	switch r := store.(type) {
+	case casStore[K]:
 		return casCallback(r)
-	case setRepo[K]:
+	case setStore[K]:
 		return setCallback(r)
 	default:
-		panic(fmt.Sprintf("exhaustive match fallback, repo type: %T", repo))
+		panic(fmt.Sprintf("exhaustive match fallback, store type: %T", store))
 	}
 }
 
