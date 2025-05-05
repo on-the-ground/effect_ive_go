@@ -5,6 +5,7 @@ import (
 
 	"github.com/on-the-ground/effect_ive_go/effects/internal/handlers"
 	"github.com/on-the-ground/effect_ive_go/effects/internal/helper"
+	sharedHelper "github.com/on-the-ground/effect_ive_go/shared/helper"
 	"go.uber.org/zap"
 
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
@@ -72,7 +73,7 @@ func PerformResumableEffect[P effectmodel.Partitionable, R any](
 	enum effectmodel.EffectEnum,
 	payload P,
 ) <-chan handlers.ResumableResult[R] {
-	handler := helper.MustGetTypedValue[handlers.ResumableHandler[P, R]](
+	handler := sharedHelper.MustGetTypedValue[handlers.ResumableHandler[P, R]](
 		func() (any, error) {
 			return helper.GetHandler(ctx, enum)
 		},
@@ -113,7 +114,7 @@ func FireAndForgetEffect[P effectmodel.Partitionable](
 	enum effectmodel.EffectEnum,
 	payload P,
 ) {
-	handler := helper.MustGetTypedValue[handlers.FireAndForgetHandler[P]](
+	handler := sharedHelper.MustGetTypedValue[handlers.FireAndForgetHandler[P]](
 		func() (any, error) {
 			return helper.GetHandler(ctx, enum)
 		},

@@ -7,9 +7,9 @@ import (
 
 	"github.com/on-the-ground/effect_ive_go/effects"
 	"github.com/on-the-ground/effect_ive_go/effects/concurrency"
-	"github.com/on-the-ground/effect_ive_go/effects/internal/helper"
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 	"github.com/on-the-ground/effect_ive_go/effects/log"
+	"github.com/on-the-ground/effect_ive_go/shared/helper"
 	"github.com/on-the-ground/effect_ive_go/shared/orderedbuffer"
 	"go.uber.org/zap"
 )
