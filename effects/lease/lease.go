@@ -26,62 +26,55 @@ func WithInMemoryEffectHandler(ctx context.Context, bufferSize, numWorkers int) 
 var ErrUnregisteredResource = errors.New("unregistered resource")
 var ErrResourceInUse = errors.New("unable to deregister resource in use")
 
-func Effect(ctx context.Context, payload payload) (bool, error) {
-	switch payload := payload.(type) {
+func EffectResourceRegistration(ctx context.Context, key string, numOwners int) (bool, error) {
+	return helper.GetTypedValueOf[bool](func() (any, error) {
+		return state.Effect(ctx, state.InsertPayloadOf(
+			key,
+			make(chan struct{}, numOwners),
+		))
+	})
+}
 
-	case register:
+func EffectResourceDeregistration(ctx context.Context, key string) (bool, error) {
+	if ch, err := helper.GetTypedValueOf[chan struct{}](func() (any, error) {
+		return state.Effect(ctx, state.LoadPayloadOf(key))
+	}); err != nil {
+		return false, fmt.Errorf("%w: key %s", ErrUnregisteredResource, key)
+	} else if len(ch) != 0 {
+		return false, fmt.Errorf("%w key %s", ErrResourceInUse, key)
+	} else {
 		return helper.GetTypedValueOf[bool](func() (any, error) {
-			return state.Effect(ctx, state.InsertPayloadOf(
-				payload.Key,
-				make(chan struct{}, payload.NumOwners),
-			))
+			return state.Effect(ctx, state.CADPayloadOf(key, ch))
 		})
+	}
+}
 
-	case deregister:
-		if ch, err := helper.GetTypedValueOf[chan struct{}](func() (any, error) {
-			return state.Effect(ctx, state.LoadPayloadOf(payload.Key))
-		}); err != nil {
-			return false, fmt.Errorf("%w: key %s", ErrUnregisteredResource, payload.Key)
-		} else if len(ch) != 0 {
-			return false, fmt.Errorf("%w key %s", ErrResourceInUse, payload.Key)
-		} else {
-			return helper.GetTypedValueOf[bool](func() (any, error) {
-				return state.Effect(ctx, state.CADPayloadOf(
-					payload.Key,
-					ch,
-				))
-			})
+func EffectAcquisition(ctx context.Context, key string) (bool, error) {
+	if ch, err := helper.GetTypedValueOf[chan struct{}](func() (any, error) {
+		return state.Effect(ctx, state.LoadPayloadOf(key))
+	}); err != nil {
+		return false, fmt.Errorf("%w: key %s", ErrUnregisteredResource, key)
+	} else {
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		case ch <- struct{}{}:
+			return true, nil
 		}
+	}
+}
 
-	case acquire:
-		if ch, err := helper.GetTypedValueOf[chan struct{}](func() (any, error) {
-			return state.Effect(ctx, state.LoadPayloadOf(payload.Key))
-		}); err != nil {
-			return false, fmt.Errorf("%w: key %s", ErrUnregisteredResource, payload.Key)
-		} else {
-			select {
-			case <-ctx.Done():
-				return false, ctx.Err()
-			case ch <- struct{}{}:
-				return true, nil
-			}
+func EffectRelease(ctx context.Context, key string) (bool, error) {
+	if ch, err := helper.GetTypedValueOf[chan struct{}](func() (any, error) {
+		return state.Effect(ctx, state.LoadPayloadOf(key))
+	}); err != nil {
+		return false, fmt.Errorf("%w: key %s", ErrUnregisteredResource, key)
+	} else {
+		select {
+		case <-ch:
+			return true, nil
+		case <-ctx.Done():
+			return false, ctx.Err()
 		}
-
-	case release:
-		if ch, err := helper.GetTypedValueOf[chan struct{}](func() (any, error) {
-			return state.Effect(ctx, state.LoadPayloadOf(payload.Key))
-		}); err != nil {
-			return false, fmt.Errorf("%w: key %s", ErrUnregisteredResource, payload.Key)
-		} else {
-			select {
-			case <-ch:
-				return true, nil
-			case <-ctx.Done():
-				return false, ctx.Err()
-			}
-		}
-
-	default:
-		panic("exhaustive match")
 	}
 }
