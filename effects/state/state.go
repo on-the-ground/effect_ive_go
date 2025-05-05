@@ -130,15 +130,17 @@ func (sH stateHandler[K, V]) compareAndDelete(k K, old V) bool {
 	)
 }
 
-func (sH stateHandler[K, V]) insertIfAbsent(k K, v V) {
-	matchStore(sH.stateStore,
-		func(store casStore[K]) any {
-			store.InsertIfAbsent(k, v)
-			return struct{}{}
+func (sH stateHandler[K, V]) insertIfAbsent(k K, v V) bool {
+	return matchStore(sH.stateStore,
+		func(store casStore[K]) bool {
+			return store.InsertIfAbsent(k, v)
 		},
-		func(store setStore[K]) any {
+		func(store setStore[K]) bool {
+			if _, ok := store.Get(k); ok {
+				return false
+			}
 			store.Set(k, v)
-			return struct{}{}
+			return true
 		},
 	)
 }
@@ -234,7 +236,8 @@ func (sH stateHandler[K, V]) handle(ctx context.Context, payload Payload) (res a
 				delegateStateEffect(ctx, payload)
 			}()
 		}
-		sH.insertIfAbsent(payload.Key, payload.New)
+		res = sH.insertIfAbsent(payload.Key, payload.New)
+		err = nil
 		payloadWithTimeSpan := statePayloadWithNow(payload)
 		concurrency.Effect(ctx, func(ctx context.Context) {
 			select {
@@ -243,7 +246,7 @@ func (sH stateHandler[K, V]) handle(ctx context.Context, payload Payload) (res a
 			default:
 			}
 		})
-		return nil, nil
+		return
 
 	case load[K]:
 		v, ok := sH.load(payload.Key)

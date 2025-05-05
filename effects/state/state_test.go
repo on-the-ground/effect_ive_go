@@ -15,48 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type testSetStore[K comparable] struct {
-	*sync.Map
-}
-
-func newTestSetStore[K comparable]() state.StateStore {
-	return state.NewSetStore(testSetStore[K]{Map: &sync.Map{}})
-}
-
-func (t testSetStore[K]) Get(key K) (value any, ok bool) {
-	return t.Load(key)
-}
-
-func (t testSetStore[K]) Set(key K, value any) {
-	t.Store(key, value)
-}
-func (t testSetStore[K]) Delete(key K) {}
-
-type testCasStore[K comparable] struct {
-	*sync.Map
-}
-
-func (t testCasStore[K]) CompareAndDelete(k K, old any) bool {
-	return t.Map.CompareAndDelete(k, old)
-}
-
-func (t testCasStore[K]) CompareAndSwap(k K, old, new any) bool {
-	return t.Map.CompareAndSwap(k, old, new)
-}
-
-func (t testCasStore[K]) Load(k K) (any, bool) {
-	return t.Map.Load(k)
-}
-
-func newTestCasStore[K comparable]() state.StateStore {
-	return state.NewCasStore(testCasStore[K]{Map: &sync.Map{}})
-}
-
-func (t testCasStore[K]) InsertIfAbsent(key K, value any) (inserted bool) {
-	_, loaded := t.LoadOrStore(key, value)
-	return !loaded
-}
-
 func TestStateEffect_BasicLookup(t *testing.T) {
 	ctx := context.Background()
 
@@ -85,7 +43,7 @@ func TestStateEffect_BasicLookup(t *testing.T) {
 	}
 
 	for _, store := range []state.StateStore{
-		newTestCasStore[string](),
+		state.NewInMemoryStore[string](),
 		newTestSetStore[string](),
 	} {
 		testFn(store)
@@ -116,7 +74,7 @@ func TestStateEffect_KeyNotFound(t *testing.T) {
 	}
 
 	for _, store := range []state.StateStore{
-		newTestCasStore[string](),
+		state.NewInMemoryStore[string](),
 		newTestSetStore[string](),
 	} {
 		testFn(store)
@@ -160,7 +118,7 @@ func TestStateEffect_DelegatesToUpperScope(t *testing.T) {
 		}
 	}
 
-	for _, store := range []state.StateStore{newTestCasStore[string](), newTestSetStore[string]()} {
+	for _, store := range []state.StateStore{state.NewInMemoryStore[string](), newTestSetStore[string]()} {
 		testFn(store)
 	}
 }
@@ -241,7 +199,7 @@ func TestStateEffect_ConcurrentPartitionedAccess(t *testing.T) {
 		}
 	}
 
-	for _, store := range []state.StateStore{newTestCasStore[string](), newTestSetStore[string]()} {
+	for _, store := range []state.StateStore{state.NewInMemoryStore[string](), newTestSetStore[string]()} {
 		testFn(store)
 	}
 
@@ -309,7 +267,7 @@ func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 		wg.Wait()
 	}
 
-	for _, store := range []state.StateStore{newTestCasStore[string](), newTestSetStore[string]()} {
+	for _, store := range []state.StateStore{state.NewInMemoryStore[string](), newTestSetStore[string]()} {
 		testFn(store)
 	}
 }
@@ -346,7 +304,7 @@ func TestStateEffect_ContextTimeout(t *testing.T) {
 		assert.ErrorIs(t, err, context.DeadlineExceeded)
 	}
 
-	for _, store := range []state.StateStore{newTestCasStore[string](), newTestSetStore[string]()} {
+	for _, store := range []state.StateStore{state.NewInMemoryStore[string](), newTestSetStore[string]()} {
 		testFn(store)
 	}
 
@@ -368,17 +326,21 @@ func TestStateEffect_SetAndGet(t *testing.T) {
 		defer endOfStateHandler()
 
 		old, _ := state.Effect(ctx, state.LoadPayloadOf("foo"))
-		state.Effect(ctx, state.InsertPayloadOf("foo", 777))
+		raw, err := state.Effect(ctx, state.InsertPayloadOf("foo", 777))
+		require.NoError(t, err)
+		inserted, ok := raw.(bool)
+		require.True(t, ok)
+		require.True(t, inserted)
 		defer log.Effect(ctx, log.LogInfo, "swapped", map[string]any{
 			"old": old,
 			"new": 777,
 		})
 
-		_, err := state.Effect(ctx, state.LoadPayloadOf("foo"))
+		_, err = state.Effect(ctx, state.LoadPayloadOf("foo"))
 		assert.NoError(t, err)
 	}
 
-	for _, store := range []state.StateStore{newTestCasStore[string](), newTestSetStore[string]()} {
+	for _, store := range []state.StateStore{state.NewInMemoryStore[string](), newTestSetStore[string]()} {
 		testFn(store)
 	}
 
@@ -409,11 +371,14 @@ func TestStateEffect_SourcePayloadReturnsSink(t *testing.T) {
 		sink, ok := chVal.(chan state.TimeBoundedPayload)
 		require.True(t, ok, "expected sink channel from SourceStatePayload")
 
-		// 2. Send a StoreStatePayload
+		// 2. Send a InsertPaylod
 		key := "test-key"
 		newVal := "new-value"
-		_, err = state.Effect(ctx, state.InsertPayloadOf(key, newVal))
+		raw, err := state.Effect(ctx, state.InsertPayloadOf(key, newVal))
 		require.NoError(t, err)
+		inserted, ok := raw.(bool)
+		require.True(t, ok)
+		require.True(t, inserted)
 
 		// 3. Check the sink channel for the StoreStatePayload
 		select {
@@ -444,7 +409,7 @@ func TestStateEffect_SourcePayloadReturnsSink(t *testing.T) {
 	}
 
 	for _, store := range []state.StateStore{
-		newTestCasStore[string](),
+		state.NewInMemoryStore[string](),
 		// todo newTestSetStore[string](),
 	} {
 		testFn(store)
@@ -462,7 +427,7 @@ func TestStore_Delegation(t *testing.T) {
 			ctx,
 			2, 2,
 			false,
-			newTestCasStore[string](),
+			state.NewInMemoryStore[string](),
 			map[string]int{},
 		)
 		defer endOfTier2()
@@ -472,7 +437,7 @@ func TestStore_Delegation(t *testing.T) {
 			ctx2,
 			2, 2,
 			false,
-			newTestCasStore[string](),
+			state.NewInMemoryStore[string](),
 			map[string]int{},
 		)
 		defer endOfTier1()
@@ -506,7 +471,7 @@ func TestStore_Delegation(t *testing.T) {
 		assert.ErrorIs(t, err, state.ErrNoSuchKey, "should be no such key")
 	}
 
-	for _, store := range []state.StateStore{newTestCasStore[string](), newTestSetStore[string]()} {
+	for _, store := range []state.StateStore{state.NewInMemoryStore[string](), newTestSetStore[string]()} {
 		testFn(store)
 	}
 
@@ -523,7 +488,7 @@ func TestCompareAndSwap_Delegation(t *testing.T) {
 			ctx,
 			2, 2,
 			false,
-			newTestCasStore[string](),
+			state.NewInMemoryStore[string](),
 			map[string]int{
 				"x": 1,
 			},
@@ -535,7 +500,7 @@ func TestCompareAndSwap_Delegation(t *testing.T) {
 			ctx2,
 			2, 2,
 			false,
-			newTestCasStore[string](),
+			state.NewInMemoryStore[string](),
 			map[string]int{
 				"x": 1,
 			},
@@ -576,7 +541,7 @@ func TestCompareAndSwap_Delegation(t *testing.T) {
 	}
 
 	for _, store := range []state.StateStore{
-		newTestCasStore[string](),
+		state.NewInMemoryStore[string](),
 		// todo newTestSetStore[string](),
 	} {
 		testFn(store)
@@ -595,7 +560,7 @@ func TestCompareAndDelete_Delegation(t *testing.T) {
 			ctx,
 			2, 2,
 			false,
-			newTestCasStore[string](),
+			state.NewInMemoryStore[string](),
 			map[string]int{
 				"y": 98,
 			},
@@ -607,7 +572,7 @@ func TestCompareAndDelete_Delegation(t *testing.T) {
 			ctx2,
 			2, 2,
 			false,
-			newTestCasStore[string](),
+			state.NewInMemoryStore[string](),
 			map[string]int{
 				"y": 99,
 			},
@@ -637,8 +602,25 @@ func TestCompareAndDelete_Delegation(t *testing.T) {
 		assert.Equal(t, val.(int), 98, "Expected y=99")
 	}
 
-	for _, store := range []state.StateStore{newTestCasStore[string](), newTestSetStore[string]()} {
+	for _, store := range []state.StateStore{state.NewInMemoryStore[string](), newTestSetStore[string]()} {
 		testFn(store)
 	}
 
 }
+
+type testSetStore[K comparable] struct {
+	*sync.Map
+}
+
+func newTestSetStore[K comparable]() state.StateStore {
+	return state.NewSetStore(testSetStore[K]{Map: &sync.Map{}})
+}
+
+func (t testSetStore[K]) Get(key K) (value any, ok bool) {
+	return t.Load(key)
+}
+
+func (t testSetStore[K]) Set(key K, value any) {
+	t.Store(key, value)
+}
+func (t testSetStore[K]) Delete(key K) {}

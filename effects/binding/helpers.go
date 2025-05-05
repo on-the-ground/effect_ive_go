@@ -3,7 +3,7 @@ package binding
 import (
 	"context"
 
-	"github.com/on-the-ground/effect_ive_go/effects/internal/helper"
+	"github.com/on-the-ground/effect_ive_go/shared/helper"
 )
 
 // GetFromEffect fetches a typed value from the Binding effect using the provided key.
