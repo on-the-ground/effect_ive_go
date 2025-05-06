@@ -13,31 +13,23 @@ type Source struct{}
 func (Source) PartitionKey() string { return "" }
 func (Source) payload()             {}
 
-// load is the payload type for retrieving a value from the state.
-type load[K comparable] struct {
+// Load is the payload type for retrieving a value from the state.
+type Load[K comparable] struct {
 	Key K // should be comparable
 }
 
-func LoadPayloadOf[K comparable](k K) Payload {
-	return load[K]{Key: k}
-}
-
 // PartitionKey returns the partition key for routing this payload.
-func (p load[K]) PartitionKey() string {
+func (p Load[K]) PartitionKey() string {
 	return fmt.Sprintf("%v", p.Key)
 }
 
 // payload prevents external packages from implementing statePayload.
-func (p load[K]) payload() {}
+func (p Load[K]) payload() {}
 
 // CompareAndDelete is the payload type for deleting a key from the state.
 type CompareAndDelete[K comparable, V ComparableEquatable] struct {
 	Key K // should be comparable
 	Old V // should be comparable
-}
-
-func CADPayloadOf[K comparable, V ComparableEquatable](k K, v V) Payload {
-	return CompareAndDelete[K, V]{Key: k, Old: v}
 }
 
 func (p CompareAndDelete[K, V]) PartitionKey() string {
@@ -51,10 +43,6 @@ type InsertIfAbsent[K comparable, V ComparableEquatable] struct {
 	New V // should be comparable
 }
 
-func InsertPayloadOf[K comparable, V ComparableEquatable](k K, v V) Payload {
-	return InsertIfAbsent[K, V]{Key: k, New: v}
-}
-
 func (p InsertIfAbsent[K, V]) PartitionKey() string {
 	return fmt.Sprintf("%v", p.Key)
 }
@@ -65,10 +53,6 @@ type CompareAndSwap[K comparable, V ComparableEquatable] struct {
 	Key K // should be comparable
 	New V // should be comparable
 	Old V // should be comparable
-}
-
-func CASPayloadOf[K comparable, V ComparableEquatable](k K, old, new V) Payload {
-	return CompareAndSwap[K, V]{Key: k, Old: old, New: new}
 }
 
 func (p CompareAndSwap[K, V]) PartitionKey() string { return fmt.Sprintf("%v", p.Key) }

@@ -27,7 +27,7 @@ var (
 // Each key will map to a `peekable[time.Time]` of size `numOwners`, acting like a semaphore.
 func WithInMemoryEffectHandler(ctx context.Context, bufferSize, numWorkers int) (context.Context, func() context.Context) {
 	ctxStream, endOfStreamHandler := stream.WithEffectHandler[time.Time](ctx, bufferSize)
-	ctxStreamState, endOfStateHandler := state.WithEffectHandler[string, sourceSinkPair[time.Time]](
+	ctxStreamState, endOfStateHandler := state.WithEffectHandler[string, *sourceSinkPair[time.Time]](
 		ctxStream,
 		bufferSize, numWorkers,
 		false,
@@ -63,10 +63,10 @@ func EffectResourceRegistration(
 	)
 
 	return helper.GetTypedValueOf[bool](func() (any, error) {
-		return state.Effect(ctx, state.InsertPayloadOf(
+		return state.EffectInsertIfAbsent(ctx,
 			key,
 			peekable,
-		))
+		)
 	})
 }
 
@@ -78,20 +78,18 @@ func EffectResourceRegistrationNoExpiry(
 	pair := newBypassPair[time.Time](numOwners)
 
 	return helper.GetTypedValueOf[bool](func() (any, error) {
-		return state.Effect(ctx, state.InsertPayloadOf(
+		return state.EffectInsertIfAbsent(ctx,
 			key,
 			pair,
-		))
+		)
 	})
 }
 
 // EffectResourceDeregistration attempts to remove the lease resource (key) from state.
 // Deregistration fails if the resource is currently acquired (non-empty channel).
 func EffectResourceDeregistration(ctx context.Context, key string) (res bool, err error) {
-	var peekable sourceSinkPair[time.Time]
-	peekable, err = helper.GetTypedValueOf[sourceSinkPair[time.Time]](func() (any, error) {
-		return state.Effect(ctx, state.LoadPayloadOf(key))
-	})
+	var peekable *sourceSinkPair[time.Time]
+	peekable, err = state.EffectLoad[string, *sourceSinkPair[time.Time]](ctx, key)
 	if err != nil {
 		res, err = false, fmt.Errorf("%w: key %s", ErrUnregisteredResource, key)
 		return
@@ -107,9 +105,7 @@ func EffectResourceDeregistration(ctx context.Context, key string) (res bool, er
 			close(peekable.source)
 		}
 	}()
-	res, err = helper.GetTypedValueOf[bool](func() (any, error) {
-		return state.Effect(ctx, state.CADPayloadOf(key, peekable))
-	})
+	res, err = state.EffectCompareAndDelete(ctx, key, peekable)
 	return
 
 }
@@ -118,9 +114,7 @@ func EffectResourceDeregistration(ctx context.Context, key string) (res bool, er
 // If the resource is registered and capacity is available, the lease is granted.
 // If capacity is full, this call blocks unless context expires.
 func EffectAcquisition(ctx context.Context, key string) (bool, error) {
-	if peekable, err := helper.GetTypedValueOf[sourceSinkPair[time.Time]](func() (any, error) {
-		return state.Effect(ctx, state.LoadPayloadOf(key))
-	}); err != nil {
+	if peekable, err := state.EffectLoad[string, *sourceSinkPair[time.Time]](ctx, key); err != nil {
 		return false, fmt.Errorf("%w: key %s", ErrUnregisteredResource, key)
 	} else {
 		select {
@@ -135,9 +129,7 @@ func EffectAcquisition(ctx context.Context, key string) (bool, error) {
 // EffectRelease releases a previously acquired lease for the given key.
 // If the lease was not acquired or key is missing, it returns an error.
 func EffectRelease(ctx context.Context, key string) (bool, error) {
-	if peekable, err := helper.GetTypedValueOf[sourceSinkPair[time.Time]](func() (any, error) {
-		return state.Effect(ctx, state.LoadPayloadOf(key))
-	}); err != nil {
+	if peekable, err := state.EffectLoad[string, *sourceSinkPair[time.Time]](ctx, key); err != nil {
 		return false, fmt.Errorf("%w: key %s", ErrUnregisteredResource, key)
 	} else {
 		select {
@@ -155,16 +147,16 @@ type sourceSinkPair[T any] struct {
 	source, sink chan T
 }
 
-func newFilterablePair[T any](numOwners int) sourceSinkPair[T] {
-	return sourceSinkPair[T]{
+func newFilterablePair[T any](numOwners int) *sourceSinkPair[T] {
+	return &sourceSinkPair[T]{
 		source: make(chan T, numOwners),
 		sink:   make(chan T),
 	}
 }
 
-func newBypassPair[T any](numOwners int) sourceSinkPair[T] {
+func newBypassPair[T any](numOwners int) *sourceSinkPair[T] {
 	ch := make(chan T, numOwners)
-	return sourceSinkPair[T]{
+	return &sourceSinkPair[T]{
 		source: ch,
 		sink:   ch,
 	}

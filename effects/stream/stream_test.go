@@ -206,8 +206,8 @@ func TestSubscribeStreamPayload_MultipleSinksSequentiallyReceiveEvent(t *testing
 	ctx, logEnd := log.WithTestEffectHandler(ctx)
 	defer logEnd()
 
-	ctx, teardown := stream.WithEffectHandler[int](ctx, 32)
-	defer teardown()
+	ctx, endOfStreamHandler := stream.WithEffectHandler[int](ctx, 32)
+	defer endOfStreamHandler()
 
 	source := make(chan int, 2)
 	sink1 := make(chan int, stream.MinCapacityOfDroppedChannel)
@@ -289,8 +289,8 @@ func TestStreamEffect_OrderByStreamPayload_SortsCorrectly(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, teardown := stream.WithEffectHandler[int](ctx, 32)
-	defer teardown()
+	ctx, endOfStreamHandler := stream.WithEffectHandler[int](ctx, 32)
+	defer endOfStreamHandler()
 
 	source := make(chan int)
 	sink := make(chan int)
@@ -330,8 +330,8 @@ func TestStreamEffect_MergeStreamPayload_DoubleClose(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, teardown := stream.WithEffectHandler[int](ctx, 32)
-	defer teardown()
+	ctx, endOfStreamHandler := stream.WithEffectHandler[int](ctx, 32)
+	defer endOfStreamHandler()
 
 	// Two source channels
 	source1 := make(chan int)
