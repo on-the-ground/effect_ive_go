@@ -81,6 +81,18 @@ func PerformResumableEffect[P effectmodel.Partitionable, R any](
 	return handler.PerformEffect(ctx, payload)
 }
 
+func ResumableEffectHandlerId[P effectmodel.Partitionable, R any](
+	ctx context.Context,
+	enum effectmodel.EffectEnum,
+) string {
+	handler := sharedHelper.MustGetTypedValue[handlers.ResumableHandler[P, R]](
+		func() (any, error) {
+			return helper.GetHandler(ctx, enum)
+		},
+	)
+	return handler.EffectId
+}
+
 // WithFireAndForgetEffectHandler registers a fire-and-forget effect handler for a given effect enum.
 //
 // Suitable for one-shot effects like logging, telemetry, or background publishing.
@@ -120,6 +132,18 @@ func FireAndForgetEffect[P effectmodel.Partitionable](
 		},
 	)
 	handler.FireAndForgetEffect(ctx, payload)
+}
+
+func FireAndForgetEffectHandlerId[P effectmodel.Partitionable](
+	ctx context.Context,
+	enum effectmodel.EffectEnum,
+) string {
+	handler := sharedHelper.MustGetTypedValue[handlers.FireAndForgetHandler[P]](
+		func() (any, error) {
+			return helper.GetHandler(ctx, enum)
+		},
+	)
+	return handler.EffectId
 }
 
 // WithFireAndForgetPartitionableEffectHandler registers a partitioned fire-and-forget handler.
