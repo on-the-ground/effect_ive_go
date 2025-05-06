@@ -15,8 +15,8 @@ func TestLeaseEffect_BasicLifecycle(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, teardown := lease.WithInMemoryEffectHandler(ctx, 1, 1)
-	defer teardown()
+	ctx, endOfLeaseHandler := lease.WithInMemoryEffectHandler(ctx, 1, 1)
+	defer endOfLeaseHandler()
 
 	ok, err := lease.EffectResourceRegistrationNoExpiry(ctx, "resource", 1)
 	require.NoError(t, err)

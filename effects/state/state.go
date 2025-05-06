@@ -8,6 +8,7 @@ import (
 	"github.com/on-the-ground/effect_ive_go/effects"
 	"github.com/on-the-ground/effect_ive_go/effects/concurrency"
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
+	"github.com/on-the-ground/effect_ive_go/shared/helper"
 )
 
 // WithEffectHandler registers a resumable, partitionable effect handler for managing key-value state.
@@ -48,8 +49,63 @@ func WithEffectHandler[K comparable, V ComparableEquatable](
 	)
 }
 
-// Effect performs a state operation (get, set, delete) using the EffectState handler.
-func Effect(ctx context.Context, payload Payload) (val any, err error) {
+func EffectSource(ctx context.Context) (chan TimeBoundedPayload, error) {
+	return helper.GetTypedValueOf[chan TimeBoundedPayload](func() (any, error) {
+		return effect(ctx, Source{})
+	})
+}
+
+func EffectLoad[K comparable, V ComparableEquatable](
+	ctx context.Context,
+	key K,
+) (val V, err error) {
+	return helper.GetTypedValueOf[V](func() (any, error) {
+		return effect(ctx, Load[K]{Key: key})
+	})
+}
+
+func EffectInsertIfAbsent[K comparable, V ComparableEquatable](
+	ctx context.Context,
+	key K,
+	new V,
+) (inserted bool, err error) {
+	return helper.GetTypedValueOf[bool](func() (any, error) {
+		return effect(ctx, InsertIfAbsent[K, V]{
+			Key: key,
+			New: new,
+		})
+	})
+}
+
+func EffectCompareAndDelete[K comparable, V ComparableEquatable](
+	ctx context.Context,
+	key K,
+	old V,
+) (deleted bool, err error) {
+	return helper.GetTypedValueOf[bool](func() (any, error) {
+		return effect(ctx, CompareAndDelete[K, V]{
+			Key: key,
+			Old: old,
+		})
+	})
+}
+
+func EffectCompareAndSwap[K comparable, V ComparableEquatable](
+	ctx context.Context,
+	key K,
+	old, new V,
+) (swapped bool, err error) {
+	return helper.GetTypedValueOf[bool](func() (any, error) {
+		return effect(ctx, CompareAndSwap[K, V]{
+			Key: key,
+			Old: old,
+			New: new,
+		})
+	})
+}
+
+// effect performs a state operation (get, set, delete) using the EffectState handler.
+func effect(ctx context.Context, payload Payload) (val any, err error) {
 	resultCh := effects.PerformResumableEffect[Payload, any](ctx, effectmodel.EffectState, payload)
 	select {
 	case res, ok := <-resultCh:
@@ -83,7 +139,7 @@ func delegateStateEffect(upperCtx context.Context, payload Payload) (res any, er
 	}()
 
 	// Delegate the effect to the upper handler
-	return Effect(upperCtx, payload)
+	return effect(upperCtx, payload)
 }
 
 // stateHandler defines the in-memory state store logic.
@@ -248,7 +304,7 @@ func (sH stateHandler[K, V]) handle(ctx context.Context, payload Payload) (res a
 		})
 		return
 
-	case load[K]:
+	case Load[K]:
 		v, ok := sH.load(payload.Key)
 		if ok {
 			return v, nil
