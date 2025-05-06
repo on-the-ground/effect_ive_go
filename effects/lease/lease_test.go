@@ -18,7 +18,7 @@ func TestLeaseEffect_BasicLifecycle(t *testing.T) {
 	ctx, teardown := lease.WithInMemoryEffectHandler(ctx, 1, 1)
 	defer teardown()
 
-	ok, err := lease.EffectResourceRegistration(ctx, "resource", 1)
+	ok, err := lease.EffectResourceRegistrationNoExpiry(ctx, "resource", 1)
 	require.NoError(t, err)
 	require.True(t, ok)
 
@@ -54,6 +54,73 @@ func TestLeaseEffect_BasicLifecycle(t *testing.T) {
 	require.True(t, ok)
 
 	ok, err = lease.EffectResourceDeregistration(ctx, "resource")
+	require.NoError(t, err)
+	require.True(t, ok)
+}
+
+func TestLease_TTL_AcquireAndRelease(t *testing.T) {
+	ctx := context.Background()
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
+	defer endOfLogHandler()
+
+	ctx, endOfLeaseHandler := lease.WithInMemoryEffectHandler(ctx, 10, 2)
+	defer endOfLeaseHandler()
+
+	key := "resource/ttl"
+	ttl := 100 * time.Millisecond
+	pollInterval := 10 * time.Millisecond
+
+	// 등록
+	ok, err := lease.EffectResourceRegistration(ctx, key, 1, ttl, pollInterval)
+	require.NoError(t, err)
+	require.True(t, ok, "lease registration should succeed")
+
+	// acquire
+	ok, err = lease.EffectAcquisition(ctx, key)
+	require.NoError(t, err)
+	require.True(t, ok, "lease acquisition should succeed")
+
+	// wait past ttl
+	time.Sleep(1 * time.Second)
+
+	// release (sink에는 아무 것도 없을 것)
+	ok, err = lease.EffectRelease(ctx, key)
+	require.NoError(t, err)
+	require.True(t, ok)
+
+	ok, err = lease.EffectResourceDeregistration(ctx, key)
+	require.NoError(t, err)
+	require.True(t, ok)
+}
+
+func TestLease_TTL_AcquireAndTimelyRelease(t *testing.T) {
+	ctx := context.Background()
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
+	defer endOfLogHandler()
+
+	ctx, endOfLeaseHandler := lease.WithInMemoryEffectHandler(ctx, 10, 2)
+	defer endOfLeaseHandler()
+
+	key := "resource/quick"
+	ttl := 500 * time.Millisecond
+	pollInterval := 10 * time.Millisecond
+
+	ok, err := lease.EffectResourceRegistration(ctx, key, 1, ttl, pollInterval)
+	require.NoError(t, err)
+	require.True(t, ok)
+
+	ok, err = lease.EffectAcquisition(ctx, key)
+	require.NoError(t, err)
+	require.True(t, ok)
+
+	// wait less than TTL
+	time.Sleep(100 * time.Millisecond)
+
+	ok, err = lease.EffectRelease(ctx, key)
+	require.NoError(t, err)
+	require.True(t, ok, "release should succeed before TTL expires")
+
+	ok, err = lease.EffectResourceDeregistration(ctx, key)
 	require.NoError(t, err)
 	require.True(t, ok)
 }
