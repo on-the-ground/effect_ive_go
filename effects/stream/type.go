@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"sync/atomic"
+	"time"
 
 	"github.com/on-the-ground/effect_ive_go/shared/orderedbuffer"
 )
@@ -13,45 +13,58 @@ type payload interface {
 	sealedStreamEffectPayload()
 }
 
-type MapStreamPayloadAny interface {
+type MapAny interface {
 	Run(ctx context.Context)
 }
 
-type MapStreamPayload[T any, R any] struct {
+type Map[T any, R any] struct {
 	Source <-chan T
 	Sink   chan<- R
 	MapFn  func(T) R
 }
 
-func (m MapStreamPayload[T, R]) Run(ctx context.Context) {
+func (m Map[T, R]) Run(ctx context.Context) {
 	defer close(m.Sink)
 	mapFn(ctx, m.Source, m.Sink, m.MapFn)
 }
 
-func (m MapStreamPayload[T, R]) sealedStreamEffectPayload() {}
+func (m Map[T, R]) sealedStreamEffectPayload() {}
 
-type FilterStreamPayload[T any] struct {
+type EagerFilter[T any] struct {
 	Source    <-chan T
 	Sink      chan<- T
 	Predicate func(T) bool
 }
 
-func (f FilterStreamPayload[T]) sealedStreamEffectPayload() {}
+func (f EagerFilter[T]) sealedStreamEffectPayload() {}
 
-type MergeStreamPayload[T any] struct {
+type LazyPredicate[T any] struct {
+	Predicate    func(T) bool
+	PollInterval time.Duration
+}
+
+type LazyFilter[T any] struct {
+	Source   <-chan T
+	Sink     chan<- T
+	LazyInfo LazyPredicate[T]
+}
+
+func (f LazyFilter[T]) sealedStreamEffectPayload() {}
+
+type Merge[T any] struct {
 	Sources []<-chan T
 	Sink    chan<- T
 }
 
-func (p MergeStreamPayload[T]) sealedStreamEffectPayload() {}
+func (p Merge[T]) sealedStreamEffectPayload() {}
 
-type SubscribeStreamPayload[T any] struct {
+type Subscribe[T any] struct {
 	Source SourceAsKey[T]
 	Target *sinkDropPair[T]
 }
 
-func (p SubscribeStreamPayload[T]) sealedStreamEffectPayload() {}
-func (p SubscribeStreamPayload[T]) PartitionKey() string {
+func (p Subscribe[T]) sealedStreamEffectPayload() {}
+func (p Subscribe[T]) PartitionKey() string {
 	return p.Source.String()
 }
 
@@ -76,7 +89,6 @@ func (s SourceAsKey[T]) String() string {
 type sinkDropPair[T any] struct {
 	Sink    chan<- T
 	Dropped chan<- T
-	closed  atomic.Bool
 }
 
 var MinCapacityOfDroppedChannel = 1000
@@ -91,7 +103,6 @@ func NewSinkDropPair[T any](sink chan<- T, dropped chan<- T) *sinkDropPair[T] {
 	return &sinkDropPair[T]{
 		Sink:    sink,
 		Dropped: dropped,
-		closed:  atomic.Bool{},
 	}
 }
 

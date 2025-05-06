@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/on-the-ground/effect_ive_go/effects"
 	"github.com/on-the-ground/effect_ive_go/effects/concurrency"
@@ -38,13 +39,17 @@ func WithEffectHandler[T any](parentCtx context.Context, bufferSize int) (contex
 
 func Effect[T any](ctx context.Context, payload payload) {
 	switch msg := payload.(type) {
-	case MapStreamPayloadAny:
+	case MapAny:
 		concurrency.Effect(ctx, msg.Run)
-	case FilterStreamPayload[T]:
+	case EagerFilter[T]:
 		concurrency.Effect(ctx, func(ctx context.Context) {
-			filter(ctx, msg.Source, msg.Sink, msg.Predicate)
+			eagerFilter(ctx, msg.Source, msg.Sink, msg.Predicate)
 		})
-	case MergeStreamPayload[T]:
+	case LazyFilter[T]:
+		concurrency.Effect(ctx, func(ctx context.Context) {
+			lazyFilter(ctx, msg.Source, msg.Sink, msg.LazyInfo)
+		})
+	case Merge[T]:
 		localCtx, endOfWorkers := concurrency.WithEffectHandler(ctx, len(msg.Sources)*2)
 
 		for _, source := range msg.Sources {
@@ -58,7 +63,7 @@ func Effect[T any](ctx context.Context, payload payload) {
 			close(msg.Sink)
 		})
 
-	case SubscribeStreamPayload[T]:
+	case Subscribe[T]:
 		effects.FireAndForgetEffect(ctx, effectmodel.EffectStream, msg)
 
 	case OrderByStreamPayload[T]:
@@ -77,7 +82,7 @@ type channelRegistry[T any] struct {
 	*sync.Map
 }
 
-func (reg channelRegistry[T]) handleSubscriptionEffect(ctx context.Context, msg SubscribeStreamPayload[T]) {
+func (reg channelRegistry[T]) handleSubscriptionEffect(ctx context.Context, msg Subscribe[T]) {
 	var firstSink bool
 
 	raw, ok := reg.Load(msg.Source.String())
@@ -214,12 +219,16 @@ func mapFn[T any, R any](ctx context.Context, source <-chan T, sink chan<- R, f 
 }
 
 func pipe[T any](ctx context.Context, source <-chan T, sink chan<- T) {
-	mapFn(ctx, source, sink, func(v T) T {
-		return v
-	})
+	for v := range source {
+		select {
+		case sink <- v:
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
-func filter[T any](ctx context.Context, source <-chan T, sink chan<- T, predicate func(T) bool) {
+func eagerFilter[T any](ctx context.Context, source <-chan T, sink chan<- T, predicate func(T) bool) {
 	defer close(sink)
 	for v := range source {
 		if predicate(v) {
@@ -229,6 +238,35 @@ func filter[T any](ctx context.Context, source <-chan T, sink chan<- T, predicat
 				return
 			}
 		}
+	}
+}
+
+func lazyFilter[T any](
+	ctx context.Context,
+	source <-chan T,
+	sink chan<- T,
+	lazyInfo LazyPredicate[T],
+) {
+	defer close(sink)
+
+	pollToProduce := func(v T) {
+		for {
+			if !lazyInfo.Predicate(v) {
+				return
+			}
+			select {
+			case sink <- v:
+				return
+			case <-ctx.Done():
+				return
+			default:
+			}
+			time.Sleep(lazyInfo.PollInterval)
+		}
+	}
+
+	for v := range source {
+		pollToProduce(v)
 	}
 }
 

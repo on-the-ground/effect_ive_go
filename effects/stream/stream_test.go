@@ -26,7 +26,7 @@ func TestStreamEffect_MapFilterMerge(t *testing.T) {
 	filterSink := make(chan string)
 
 	// Step 1: Map (int -> string)
-	stream.Effect[int](ctx, stream.MapStreamPayload[int, string]{
+	stream.Effect[int](ctx, stream.Map[int, string]{
 		Source: source,
 		Sink:   mapSink,
 		MapFn: func(v int) string {
@@ -35,7 +35,7 @@ func TestStreamEffect_MapFilterMerge(t *testing.T) {
 	})
 
 	// Step 2: Filter (only even values)
-	stream.Effect[string](ctx, stream.FilterStreamPayload[string]{
+	stream.Effect[string](ctx, stream.EagerFilter[string]{
 		Source:    mapSink,
 		Sink:      filterSink,
 		Predicate: func(v string) bool { return v == "v=2" || v == "v=4" },
@@ -84,7 +84,7 @@ func TestStreamEffect_ShutdownPropagation(t *testing.T) {
 	done := make(chan string, 3) // map/filter/consumer
 
 	// MapEffect
-	stream.Effect[int](ctx, stream.MapStreamPayload[int, string]{
+	stream.Effect[int](ctx, stream.Map[int, string]{
 		Source: source,
 		Sink:   mapSink,
 		MapFn: func(v int) string {
@@ -93,7 +93,7 @@ func TestStreamEffect_ShutdownPropagation(t *testing.T) {
 	})
 
 	// FilterEffect
-	stream.Effect[string](ctx, stream.FilterStreamPayload[string]{
+	stream.Effect[string](ctx, stream.EagerFilter[string]{
 		Source:    mapSink,
 		Sink:      filterSink,
 		Predicate: func(v string) bool { return strings.HasSuffix(v, "2") || strings.HasSuffix(v, "4") },
@@ -159,7 +159,7 @@ func TestSubscribeStreamPayload_OneSinkReceivesEvent(t *testing.T) {
 	dropped := make(chan int, stream.MinCapacityOfDroppedChannel)
 
 	// 1. Subscribe sink
-	stream.Effect[int](ctx, stream.SubscribeStreamPayload[int]{
+	stream.Effect[int](ctx, stream.Subscribe[int]{
 		Source: source,
 		Target: stream.NewSinkDropPair(
 			sink,
@@ -210,7 +210,7 @@ func TestSubscribeStreamPayload_MultipleSinksSequentiallyReceiveEvent(t *testing
 	dropped := make(chan int, stream.MinCapacityOfDroppedChannel)
 
 	// 1. Subscribe sinks
-	stream.Effect[int](ctx, stream.SubscribeStreamPayload[int]{
+	stream.Effect[int](ctx, stream.Subscribe[int]{
 		Source: source,
 		Target: stream.NewSinkDropPair(
 			sink1,
@@ -218,7 +218,7 @@ func TestSubscribeStreamPayload_MultipleSinksSequentiallyReceiveEvent(t *testing
 		),
 	})
 
-	stream.Effect[int](ctx, stream.SubscribeStreamPayload[int]{
+	stream.Effect[int](ctx, stream.Subscribe[int]{
 		Source: source,
 		Target: stream.NewSinkDropPair(
 			sink2,
@@ -332,7 +332,7 @@ func TestStreamEffect_MergeStreamPayload_DoubleClose(t *testing.T) {
 	sink := make(chan int)
 
 	// Merge both sources into one sink by MergeStreamPayload
-	stream.Effect[int](ctx, stream.MergeStreamPayload[int]{
+	stream.Effect[int](ctx, stream.Merge[int]{
 		Sources: []<-chan int{source1, source2},
 		Sink:    sink,
 	})
@@ -353,4 +353,59 @@ func TestStreamEffect_MergeStreamPayload_DoubleClose(t *testing.T) {
 	}
 
 	assert.ElementsMatch(t, []int{1, 2}, results)
+}
+
+func TestStreamEffect_LazyFilter_TTLDrop(t *testing.T) {
+	type Message struct {
+		Ts time.Time
+	}
+
+	ctx := context.Background()
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
+	defer endOfLogHandler()
+
+	ctx, end := stream.WithEffectHandler[Message](ctx, 10)
+	defer end()
+
+	source := make(chan Message)
+	sink := make(chan Message) // 🔴 unbuffered → 필터가 lazy하게 동작하도록 강제
+
+	ttl := 100 * time.Millisecond
+
+	// LazyFilter: 메시지가 아직 expire되지 않았을 때만 통과
+	stream.Effect[Message](ctx, stream.LazyFilter[Message]{
+		Source: source,
+		Sink:   sink,
+		LazyInfo: stream.LazyPredicate[Message]{
+			Predicate: func(m Message) bool {
+				return m.Ts.Add(ttl).After(time.Now())
+			},
+			PollInterval: 50 * time.Millisecond,
+		},
+	})
+
+	// Consumer: 일부러 늦게 시작해서 TTL이 지나게 만듦
+	var results []Message
+	done := make(chan struct{})
+	go func() {
+		time.Sleep(1 * time.Second) // ⏱️ Lazy하게 처리되도록 지연
+		for v := range sink {
+			results = append(results, v)
+		}
+		close(done)
+	}()
+
+	// Produce: 현재 시각 기준 메시지 1개
+	go func() {
+		defer close(source)
+		source <- Message{Ts: time.Now()}
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for lazy filter pipeline")
+	}
+
+	assert.Len(t, results, 0, "lazy filter should drop message after TTL expiry")
 }
