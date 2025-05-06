@@ -26,6 +26,16 @@ func (p Load[K]) PartitionKey() string {
 // payload prevents external packages from implementing statePayload.
 func (p Load[K]) payload() {}
 
+// loadWoDelegation is the payload type for retrieving a value from the state without delegation.
+type loadWoDelegation[K comparable] struct {
+	Key K // should be comparable
+}
+
+func (p loadWoDelegation[K]) PartitionKey() string {
+	return fmt.Sprintf("%v", p.Key)
+}
+func (p loadWoDelegation[K]) payload() {}
+
 // CompareAndDelete is the payload type for deleting a key from the state.
 type CompareAndDelete[K comparable, V ComparableEquatable] struct {
 	Key K // should be comparable
