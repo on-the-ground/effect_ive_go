@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/on-the-ground/effect_ive_go/effects"
 	"github.com/on-the-ground/effect_ive_go/effects/concurrency"
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
+	"github.com/on-the-ground/effect_ive_go/effects/log"
 	"github.com/on-the-ground/effect_ive_go/shared/helper"
 )
 
@@ -289,7 +291,22 @@ func (sH stateHandler[K, V]) handle(ctx context.Context, payload Payload) (res a
 	case InsertIfAbsent[K, V]:
 		if sH.delegation {
 			defer func() {
-				delegateStateEffect(ctx, payload)
+				if inserted, err := helper.GetTypedValueOf[bool](func() (any, error) {
+					return delegateStateEffect(ctx, payload)
+				}); err != nil {
+					log.Effect(ctx, log.LogError, "fail to delegate insertion", map[string]interface{}{
+						"payload": payload,
+						"err":     err,
+					})
+				} else if alreadyExist := !inserted; alreadyExist {
+					helper.Retry(5, func() error {
+						err := tryToUpdate(ctx, payload)
+						if err != nil {
+							time.Sleep(10 * time.Millisecond)
+						}
+						return err
+					})
+				}
 			}()
 		}
 		res = sH.insertIfAbsent(payload.Key, payload.New)
@@ -312,8 +329,16 @@ func (sH stateHandler[K, V]) handle(ctx context.Context, payload Payload) (res a
 		if v, err := delegateStateEffect(ctx, payload); err != nil {
 			return nil, ErrNoSuchKey
 		} else {
+			sH.insertIfAbsent(payload.Key, v.(V))
 			return v, nil
 		}
+
+	case loadWoDelegation[K]:
+		v, ok := sH.load(payload.Key)
+		if ok {
+			return v, nil
+		}
+		return nil, ErrNoSuchKey
 
 	case Source:
 		return sH.sink, nil
@@ -334,4 +359,39 @@ type TimeBoundedPayload struct {
 
 func statePayloadWithNow(payload Payload) TimeBoundedPayload {
 	return TimeBoundedPayload{Payload: payload, TimeSpan: effects.Now()}
+}
+
+func tryToUpdate[K comparable, V ComparableEquatable](ctx context.Context, payload InsertIfAbsent[K, V]) error {
+	raw, err := effect(ctx, loadWoDelegation[K]{Key: payload.Key})
+	if err != nil {
+		log.Effect(ctx, log.LogError, "fail to load value from parent handler", map[string]interface{}{
+			"key": payload.Key,
+			"err": err,
+		})
+		return err
+	}
+	old := raw.(V)
+	if Equals(old, payload.New) {
+		return nil
+	}
+	log.Effect(ctx, log.LogInfo, "the value of parent handler is outdated", map[string]interface{}{
+		"key": payload.Key,
+		"old": old,
+		"new": payload.New,
+	})
+
+	if swapped, err := EffectCompareAndSwap(ctx, payload.Key, old, payload.New); err != nil {
+		log.Effect(ctx, log.LogError, "fail to update old value of parent handler", map[string]interface{}{
+			"key": payload.Key,
+			"err": err,
+		})
+		return err
+	} else if !swapped {
+		log.Effect(ctx, log.LogInfo, "the old value has changed, retry cas", map[string]interface{}{
+			"key": payload.Key,
+			"err": err,
+		})
+		return errors.New("fail to cas")
+	}
+	return nil
 }

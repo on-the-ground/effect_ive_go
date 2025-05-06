@@ -513,7 +513,7 @@ func TestCompareAndSwap_Delegation(t *testing.T) {
 		defer endOfTier0()
 
 		// CAS should succeed in tier 0
-		ok, err := state.EffectCompareAndSwap[string, int](ctx0, "x", 1, 2)
+		ok, err := state.EffectCompareAndSwap(ctx0, "x", 1, 2)
 		assert.NoError(t, err, "CAS delegation failed")
 		assert.True(t, ok, "CAS delegation returned false, expected true")
 
@@ -599,6 +599,101 @@ func TestCompareAndDelete_Delegation(t *testing.T) {
 		testFn(store)
 	}
 
+}
+
+func TestInsertIfAbsent_DelegationConflict_CAS_Success(t *testing.T) {
+	ctx := context.Background()
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
+	defer endOfLogHandler()
+
+	// Upper tier with key "conflict" already set to "old"
+	upperRepo := state.NewInMemoryStore[string]()
+	upperCtx, endUpper := state.WithEffectHandler(ctx, 1, 1, false, upperRepo, map[string]string{
+		"conflict": "old",
+	})
+	defer endUpper()
+
+	// Lower tier (cache), delegation enabled
+	cacheRepo := state.NewInMemoryStore[string]()
+	cacheCtx, endCache := state.WithEffectHandler[string, string](upperCtx, 1, 1, true, cacheRepo, nil)
+	defer endCache()
+
+	// Insert with different value → should trigger CAS
+	ok, err := state.EffectInsertIfAbsent(cacheCtx, "conflict", "new")
+	assert.True(t, ok)
+	assert.NoError(t, err)
+
+	// Upper value should be updated to "new"
+	v, err := state.EffectLoad[string, string](upperCtx, "conflict")
+	assert.NoError(t, err)
+	assert.Equal(t, "new", v)
+}
+
+func TestInsertIfAbsent_DelegationConflict_CAS_Success_2(t *testing.T) {
+	ctx := context.Background()
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
+	defer endOfLogHandler()
+
+	// Upper tier starts with "x" = "v1"
+	upperRepo := state.NewInMemoryStore[string]()
+	upperCtx, endUpper := state.WithEffectHandler(ctx, 1, 1, false, upperRepo, map[string]string{
+		"x": "v1",
+	})
+	defer endUpper()
+
+	// Lower tier (cache), delegation enabled
+	cacheRepo := state.NewInMemoryStore[string]()
+	cacheCtx, endCache := state.WithEffectHandler[string, string](upperCtx, 1, 1, true, cacheRepo, nil)
+	defer endCache()
+
+	// Set up sync to force external CAS to run before retry
+	ready := make(chan struct{})
+	done := make(chan struct{})
+
+	go func() {
+		<-ready
+		_, _ = state.EffectCompareAndSwap(upperCtx, "x", "v1", "external")
+		close(done)
+	}()
+
+	// Trigger InsertIfAbsent, with delayed CAS
+	close(ready)
+	ok, err := state.EffectInsertIfAbsent(cacheCtx, "x", "v2")
+	assert.True(t, ok)
+	assert.NoError(t, err)
+
+	// Wait for external CAS to finish
+	<-done
+
+	// Final value should be "external", not "v2"
+	v, err := state.EffectLoad[string, string](upperCtx, "x")
+	assert.NoError(t, err)
+	assert.Equal(t, "v2", v)
+}
+
+func TestInsertIfAbsent_DelegationConflict_EqualValues_Skip(t *testing.T) {
+	ctx := context.Background()
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
+	defer endOfLogHandler()
+
+	// Upper tier has the same value
+	upperRepo := state.NewInMemoryStore[string]()
+	upperCtx, endUpper := state.WithEffectHandler(ctx, 1, 1, false, upperRepo, map[string]string{
+		"idempotent": "same",
+	})
+	defer endUpper()
+
+	cacheRepo := state.NewInMemoryStore[string]()
+	cacheCtx, endCache := state.WithEffectHandler[string, string](upperCtx, 1, 1, true, cacheRepo, nil)
+	defer endCache()
+
+	ok, err := state.EffectInsertIfAbsent(cacheCtx, "idempotent", "same")
+	assert.True(t, ok)
+	assert.NoError(t, err)
+
+	v, err := state.EffectLoad[string, string](upperCtx, "idempotent")
+	assert.NoError(t, err)
+	assert.Equal(t, "same", v)
 }
 
 type testSetStore[K comparable] struct {
