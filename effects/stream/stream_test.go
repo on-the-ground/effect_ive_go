@@ -26,20 +26,22 @@ func TestStreamEffect_MapFilterMerge(t *testing.T) {
 	filterSink := make(chan string)
 
 	// Step 1: Map (int -> string)
-	stream.Effect[int](ctx, stream.Map[int, string]{
-		Source: source,
-		Sink:   mapSink,
-		MapFn: func(v int) string {
+	stream.EffectMap(
+		ctx,
+		source,
+		mapSink,
+		func(v int) string {
 			return "v=" + string(rune('0'+v))
 		},
-	})
+	)
 
 	// Step 2: Filter (only even values)
-	stream.Effect[string](ctx, stream.EagerFilter[string]{
-		Source:    mapSink,
-		Sink:      filterSink,
-		Predicate: func(v string) bool { return v == "v=2" || v == "v=4" },
-	})
+	stream.EffectEagerFilter(
+		ctx,
+		mapSink,
+		filterSink,
+		func(v string) bool { return v == "v=2" || v == "v=4" },
+	)
 
 	// Step 3: Consumer
 	var results []string
@@ -84,20 +86,22 @@ func TestStreamEffect_ShutdownPropagation(t *testing.T) {
 	done := make(chan string, 3) // map/filter/consumer
 
 	// MapEffect
-	stream.Effect[int](ctx, stream.Map[int, string]{
-		Source: source,
-		Sink:   mapSink,
-		MapFn: func(v int) string {
+	stream.EffectMap(
+		ctx,
+		source,
+		mapSink,
+		func(v int) string {
 			return fmt.Sprintf("v=%d", v)
 		},
-	})
+	)
 
 	// FilterEffect
-	stream.Effect[string](ctx, stream.EagerFilter[string]{
-		Source:    mapSink,
-		Sink:      filterSink,
-		Predicate: func(v string) bool { return strings.HasSuffix(v, "2") || strings.HasSuffix(v, "4") },
-	})
+	stream.EffectEagerFilter(
+		ctx,
+		mapSink,
+		filterSink,
+		func(v string) bool { return strings.HasSuffix(v, "2") || strings.HasSuffix(v, "4") },
+	)
 
 	// Sink consumer (done iff filterSink is closed)
 	go func() {
@@ -159,13 +163,14 @@ func TestSubscribeStreamPayload_OneSinkReceivesEvent(t *testing.T) {
 	dropped := make(chan int, stream.MinCapacityOfDroppedChannel)
 
 	// 1. Subscribe sink
-	stream.Effect[int](ctx, stream.Subscribe[int]{
-		Source: source,
-		Target: stream.NewSinkDropPair(
+	stream.EffectSubscribe(
+		ctx,
+		source,
+		stream.NewSinkDropPair(
 			sink,
 			chan<- int(dropped),
 		),
-	})
+	)
 
 	// 2. Allow registration to stabilize
 	time.Sleep(300 * time.Millisecond)
@@ -210,21 +215,23 @@ func TestSubscribeStreamPayload_MultipleSinksSequentiallyReceiveEvent(t *testing
 	dropped := make(chan int, stream.MinCapacityOfDroppedChannel)
 
 	// 1. Subscribe sinks
-	stream.Effect[int](ctx, stream.Subscribe[int]{
-		Source: source,
-		Target: stream.NewSinkDropPair(
+	stream.EffectSubscribe(
+		ctx,
+		source,
+		stream.NewSinkDropPair(
 			sink1,
 			dropped,
 		),
-	})
+	)
 
-	stream.Effect[int](ctx, stream.Subscribe[int]{
-		Source: source,
-		Target: stream.NewSinkDropPair(
+	stream.EffectSubscribe(
+		ctx,
+		source,
+		stream.NewSinkDropPair(
 			sink2,
 			dropped,
 		),
-	})
+	)
 
 	// 2. Allow registration to stabilize
 	time.Sleep(300 * time.Millisecond)
@@ -297,14 +304,15 @@ func TestStreamEffect_OrderByStreamPayload_SortsCorrectly(t *testing.T) {
 		source <- 3
 	}()
 
-	stream.Effect[int](ctx, stream.OrderByStreamPayload[int]{
-		WindowSize: 5,
-		Source:     source,
-		Sink:       sink,
-		CmpFn: func(a, b int) int {
+	stream.EffectOrderBy(
+		ctx,
+		5,
+		source,
+		sink,
+		func(a, b int) int {
 			return a - b
 		},
-	})
+	)
 
 	var results []int
 	for v := range sink {
@@ -332,10 +340,10 @@ func TestStreamEffect_MergeStreamPayload_DoubleClose(t *testing.T) {
 	sink := make(chan int)
 
 	// Merge both sources into one sink by MergeStreamPayload
-	stream.Effect[int](ctx, stream.Merge[int]{
-		Sources: []<-chan int{source1, source2},
-		Sink:    sink,
-	})
+	stream.EffectMerge(ctx,
+		[]<-chan int{source1, source2},
+		sink,
+	)
 
 	// Produce and close from both sources
 	go func() {
@@ -373,16 +381,15 @@ func TestStreamEffect_LazyFilter_TTLDrop(t *testing.T) {
 	ttl := 100 * time.Millisecond
 
 	// LazyFilter: 메시지가 아직 expire되지 않았을 때만 통과
-	stream.Effect[Message](ctx, stream.LazyFilter[Message]{
-		Source: source,
-		Sink:   sink,
-		LazyInfo: stream.LazyPredicate[Message]{
-			Predicate: func(m Message) bool {
-				return m.Ts.Add(ttl).After(time.Now())
-			},
-			PollInterval: 50 * time.Millisecond,
+	stream.EffectLazyFilter(ctx,
+		source,
+		sink,
+
+		func(m Message) bool {
+			return m.Ts.Add(ttl).After(time.Now())
 		},
-	})
+		50*time.Millisecond,
+	)
 
 	// Consumer: 일부러 늦게 시작해서 TTL이 지나게 만듦
 	var results []Message

@@ -55,14 +55,12 @@ func EffectResourceRegistration(
 
 	peekable := newFilterablePair[time.Time](numOwners)
 
-	stream.Effect[time.Time](ctx, stream.LazyFilter[time.Time]{
-		Source: peekable.source,
-		Sink:   peekable.sink,
-		LazyInfo: stream.LazyPredicate[time.Time]{
-			Predicate:    expire,
-			PollInterval: pollInterval,
-		},
-	})
+	stream.EffectLazyFilter(ctx,
+		peekable.source,
+		peekable.sink,
+		expire,
+		pollInterval,
+	)
 
 	return helper.GetTypedValueOf[bool](func() (any, error) {
 		return state.Effect(ctx, state.InsertPayloadOf(

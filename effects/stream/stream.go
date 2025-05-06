@@ -37,52 +37,156 @@ func WithEffectHandler[T any](parentCtx context.Context, bufferSize int) (contex
 	}
 }
 
-func Effect[T any](ctx context.Context, payload payload) {
-	switch msg := payload.(type) {
-	case MapAny:
-		concurrency.Effect(ctx, msg.Run)
-	case EagerFilter[T]:
-		concurrency.Effect(ctx, func(ctx context.Context) {
-			eagerFilter(ctx, msg.Source, msg.Sink, msg.Predicate)
-		})
-	case LazyFilter[T]:
-		concurrency.Effect(ctx, func(ctx context.Context) {
-			lazyFilter(ctx, msg.Source, msg.Sink, msg.LazyInfo)
-		})
-	case Merge[T]:
-		localCtx, endOfWorkers := concurrency.WithEffectHandler(ctx, len(msg.Sources)*2)
+func EffectMap[T any, R any](
+	ctx context.Context,
+	source <-chan T,
+	sink chan<- R,
+	mapFn func(T) R,
+) {
+	concurrency.Effect(ctx, func(ctx context.Context) {
+		defer close(sink)
+		for v := range source {
+			select {
+			case sink <- mapFn(v):
+			case <-ctx.Done():
+				return
+			}
+		}
+	})
+}
 
-		for _, source := range msg.Sources {
-			concurrency.Effect(localCtx, func(ctx context.Context) {
-				pipe(ctx, source, msg.Sink)
-			})
+func EffectEagerFilter[T any](
+	ctx context.Context,
+	source <-chan T,
+	sink chan<- T,
+	predicate func(T) bool,
+) {
+	concurrency.Effect(ctx, func(ctx context.Context) {
+		defer close(sink)
+		for v := range source {
+			if predicate(v) {
+				select {
+				case sink <- v:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	})
+}
+
+func EffectLazyFilter[T any](
+	ctx context.Context,
+	source <-chan T,
+	sink chan<- T,
+	predicate func(T) bool,
+	pollInterval time.Duration,
+) {
+	concurrency.Effect(ctx, func(ctx context.Context) {
+		defer close(sink)
+
+		pollToProduce := func(v T) {
+			for {
+				if !predicate(v) {
+					return
+				}
+				select {
+				case sink <- v:
+					return
+				case <-ctx.Done():
+					return
+				default:
+				}
+				time.Sleep(pollInterval)
+			}
 		}
 
-		concurrency.Effect(ctx, func(ctx context.Context) {
-			endOfWorkers()
-			close(msg.Sink)
+		for v := range source {
+			pollToProduce(v)
+		}
+
+	})
+}
+
+func EffectMerge[T any](
+	ctx context.Context,
+	sources []<-chan T,
+	sink chan<- T,
+) {
+	localCtx, endOfWorkers := concurrency.WithEffectHandler(ctx, len(sources)*2)
+
+	for _, source := range sources {
+		concurrency.Effect(localCtx, func(ctx context.Context) {
+			for v := range source {
+				select {
+				case sink <- v:
+				case <-ctx.Done():
+					return
+				}
+			}
 		})
-
-	case Subscribe[T]:
-		effects.FireAndForgetEffect(ctx, effectmodel.EffectStream, msg)
-
-	case OrderByStreamPayload[T]:
-		concurrency.Effect(ctx, func(ctx context.Context) {
-			orderBy(ctx, msg.WindowSize, msg.CmpFn, msg.Source, msg.Sink)
-		})
-
-	default:
-		// StreamEffect is sealed interface, so this should never happen
-		// Bug in the code
-		panic(fmt.Sprintf("unrecognized stream effect payload: %T", msg))
 	}
+
+	concurrency.Effect(ctx, func(ctx context.Context) {
+		endOfWorkers()
+		close(sink)
+	})
+}
+
+func EffectSubscribe[T any](
+	ctx context.Context,
+	Source SourceAsKey[T],
+	Target *sinkDropPair[T],
+) {
+	effects.FireAndForgetEffect(ctx, effectmodel.EffectStream, subscribePayload[T]{
+		Source: Source,
+		Target: Target,
+	})
+}
+
+func EffectOrderBy[T any](
+	ctx context.Context,
+	windowSize int,
+	source SourceAsKey[T],
+	sink chan<- T,
+	cmpFn orderedbuffer.CompareFunc[T],
+) {
+	concurrency.Effect(ctx, func(ctx context.Context) {
+		buf := orderedbuffer.NewOrderedBoundedBuffer(windowSize, cmpFn)
+
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			for ordered := range buf.Source() {
+				select {
+				case <-ctx.Done():
+				case sink <- ordered:
+				}
+			}
+		}()
+
+		defer func() {
+			buf.Close(ctx)
+			<-done
+			close(sink)
+		}()
+
+		for v := range source {
+			ok := buf.Insert(ctx, v)
+			if !ok {
+				log.Effect(ctx, log.LogDebug, "ordered buffer closed", map[string]interface{}{})
+				return
+			}
+		}
+
+	})
 }
 
 type channelRegistry[T any] struct {
 	*sync.Map
 }
 
-func (reg channelRegistry[T]) handleSubscriptionEffect(ctx context.Context, msg Subscribe[T]) {
+func (reg channelRegistry[T]) handleSubscriptionEffect(ctx context.Context, msg subscribePayload[T]) {
 	var firstSink bool
 
 	raw, ok := reg.Load(msg.Source.String())
@@ -205,97 +309,5 @@ func (reg *channelRegistry[T]) arbit(ctx context.Context, source SourceAsKey[T])
 			})
 		}
 
-	}
-}
-
-func mapFn[T any, R any](ctx context.Context, source <-chan T, sink chan<- R, f func(T) R) {
-	for v := range source {
-		select {
-		case sink <- f(v):
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
-func pipe[T any](ctx context.Context, source <-chan T, sink chan<- T) {
-	for v := range source {
-		select {
-		case sink <- v:
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
-func eagerFilter[T any](ctx context.Context, source <-chan T, sink chan<- T, predicate func(T) bool) {
-	defer close(sink)
-	for v := range source {
-		if predicate(v) {
-			select {
-			case sink <- v:
-			case <-ctx.Done():
-				return
-			}
-		}
-	}
-}
-
-func lazyFilter[T any](
-	ctx context.Context,
-	source <-chan T,
-	sink chan<- T,
-	lazyInfo LazyPredicate[T],
-) {
-	defer close(sink)
-
-	pollToProduce := func(v T) {
-		for {
-			if !lazyInfo.Predicate(v) {
-				return
-			}
-			select {
-			case sink <- v:
-				return
-			case <-ctx.Done():
-				return
-			default:
-			}
-			time.Sleep(lazyInfo.PollInterval)
-		}
-	}
-
-	for v := range source {
-		pollToProduce(v)
-	}
-}
-
-func orderBy[T any](ctx context.Context, windowSize int, cmp orderedbuffer.CompareFunc[T], source <-chan T, sink chan<- T) {
-
-	buf := orderedbuffer.NewOrderedBoundedBuffer(windowSize, cmp)
-
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		for ordered := range buf.Source() {
-			select {
-			case <-ctx.Done():
-			case sink <- ordered:
-			}
-		}
-	}()
-
-	defer func() {
-		buf.Close(ctx)
-		<-done
-		close(sink)
-	}()
-
-	for v := range source {
-		ok := buf.Insert(ctx, v)
-		if !ok {
-			log.Effect(ctx, log.LogDebug, "ordered buffer closed", map[string]interface{}{})
-			return
-		}
 	}
 }
