@@ -1,82 +1,16 @@
 package stream
 
 import (
-	"context"
 	"fmt"
 	"reflect"
-	"time"
-
-	"github.com/on-the-ground/effect_ive_go/shared/orderedbuffer"
 )
 
-type payload interface {
-	sealedStreamEffectPayload()
-}
-
-type MapAny interface {
-	Run(ctx context.Context)
-}
-
-type Map[T any, R any] struct {
-	Source <-chan T
-	Sink   chan<- R
-	MapFn  func(T) R
-}
-
-func (m Map[T, R]) Run(ctx context.Context) {
-	defer close(m.Sink)
-	mapFn(ctx, m.Source, m.Sink, m.MapFn)
-}
-
-func (m Map[T, R]) sealedStreamEffectPayload() {}
-
-type EagerFilter[T any] struct {
-	Source    <-chan T
-	Sink      chan<- T
-	Predicate func(T) bool
-}
-
-func (f EagerFilter[T]) sealedStreamEffectPayload() {}
-
-type LazyPredicate[T any] struct {
-	Predicate    func(T) bool
-	PollInterval time.Duration
-}
-
-type LazyFilter[T any] struct {
-	Source   <-chan T
-	Sink     chan<- T
-	LazyInfo LazyPredicate[T]
-}
-
-func (f LazyFilter[T]) sealedStreamEffectPayload() {}
-
-type Merge[T any] struct {
-	Sources []<-chan T
-	Sink    chan<- T
-}
-
-func (p Merge[T]) sealedStreamEffectPayload() {}
-
-type Subscribe[T any] struct {
+type subscribePayload[T any] struct {
 	Source SourceAsKey[T]
 	Target *sinkDropPair[T]
 }
 
-func (p Subscribe[T]) sealedStreamEffectPayload() {}
-func (p Subscribe[T]) PartitionKey() string {
-	return p.Source.String()
-}
-
-type OrderByStreamPayload[T any] struct {
-	WindowSize int
-	CmpFn      orderedbuffer.CompareFunc[T]
-	Source     SourceAsKey[T]
-	Sink       chan<- T
-}
-
-func (p OrderByStreamPayload[T]) sealedStreamEffectPayload() {}
-func (p OrderByStreamPayload[T]) PartitionKey() string {
+func (p subscribePayload[T]) PartitionKey() string {
 	return p.Source.String()
 }
 
