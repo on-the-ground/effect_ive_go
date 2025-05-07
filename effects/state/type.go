@@ -81,10 +81,10 @@ type StateStore interface {
 }
 
 type CasStore[K comparable] interface {
-	Load(key K) (value any, ok bool)
-	InsertIfAbsent(key K, value any) (inserted bool)
-	CompareAndSwap(key K, old, new any) (swapped bool)
-	CompareAndDelete(key K, old any) (deleted bool)
+	Load(key K) (value any, ok bool, err error)
+	InsertIfAbsent(key K, value any) (inserted bool, err error)
+	CompareAndSwap(key K, old, new any) (swapped bool, err error)
+	CompareAndDelete(key K, old any) (deleted bool, err error)
 }
 
 type casStore[K comparable] interface {
@@ -103,9 +103,9 @@ func NewCasStore[K comparable](store CasStore[K]) StateStore {
 }
 
 type SetStore[K comparable] interface {
-	Get(key K) (value any, ok bool)
-	Set(key K, value any)
-	Delete(key K)
+	Get(key K) (value any, ok bool, err error)
+	Set(key K, value any) error
+	Delete(key K) error
 }
 
 type setStore[K comparable] interface {
@@ -125,9 +125,9 @@ func NewSetStore[K comparable](store SetStore[K]) StateStore {
 
 func matchStore[K comparable, T any](
 	store StateStore,
-	casCallback func(casStore[K]) T,
-	setCallback func(setStore[K]) T,
-) T {
+	casCallback func(casStore[K]) (T, error),
+	setCallback func(setStore[K]) (T, error),
+) (T, error) {
 	switch r := store.(type) {
 	case casStore[K]:
 		return casCallback(r)

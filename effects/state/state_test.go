@@ -704,11 +704,17 @@ func newTestSetStore[K comparable]() state.StateStore {
 	return state.NewSetStore(testSetStore[K]{Map: &sync.Map{}})
 }
 
-func (t testSetStore[K]) Get(key K) (value any, ok bool) {
-	return t.Load(key)
+func (t testSetStore[K]) Get(key K) (value any, ok bool, err error) {
+	value, ok = t.Load(key)
+	return
 }
 
-func (t testSetStore[K]) Set(key K, value any) {
+func (t testSetStore[K]) Set(key K, value any) error {
 	t.Store(key, value)
+	return nil
 }
-func (t testSetStore[K]) Delete(key K) {}
+
+func (t testSetStore[K]) Delete(key K) error {
+	t.Map.Delete(key)
+	return nil
+}
