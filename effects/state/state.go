@@ -152,79 +152,87 @@ type stateHandler[K comparable, V ComparableEquatable] struct {
 	delegation bool
 }
 
-func (sH stateHandler[K, V]) compareAndSwap(k K, old, new V) bool {
+func (sH stateHandler[K, V]) compareAndSwap(k K, old, new V) (bool, error) {
 	return matchStore(sH.stateStore,
-		func(store casStore[K]) bool {
+		func(store casStore[K]) (bool, error) {
 			return store.CompareAndSwap(k, old, new)
 		},
-		func(store setStore[K]) bool {
-			if cur, ok := store.Get(k); !ok {
-				return false
+		func(store setStore[K]) (bool, error) {
+			if cur, ok, err := store.Get(k); !ok || err != nil {
+				return false, err
 			} else if Equals(cur, old) {
-				return false
+				return false, nil
 			} else {
 				store.Set(k, new)
-				return true
+				return true, nil
 			}
 		},
 	)
 }
 
-func (sH stateHandler[K, V]) compareAndDelete(k K, old V) bool {
+func (sH stateHandler[K, V]) compareAndDelete(k K, old V) (bool, error) {
 	return matchStore(sH.stateStore,
-		func(store casStore[K]) bool {
+		func(store casStore[K]) (bool, error) {
 			return store.CompareAndDelete(k, old)
 		},
-		func(store setStore[K]) bool {
-			if cur, ok := store.Get(k); !ok {
-				return false
+		func(store setStore[K]) (bool, error) {
+			if cur, ok, err := store.Get(k); !ok || err != nil {
+				return false, err
 			} else if Equals(cur, old) {
-				return false
+				return false, nil
 			} else {
 				store.Delete(k)
-				return true
+				return true, nil
 			}
 		},
 	)
 }
 
-func (sH stateHandler[K, V]) insertIfAbsent(k K, v V) bool {
+func (sH stateHandler[K, V]) insertIfAbsent(k K, v V) (bool, error) {
 	return matchStore(sH.stateStore,
-		func(store casStore[K]) bool {
+		func(store casStore[K]) (bool, error) {
 			return store.InsertIfAbsent(k, v)
 		},
-		func(store setStore[K]) bool {
-			if _, ok := store.Get(k); ok {
-				return false
+		func(store setStore[K]) (bool, error) {
+			if _, ok, err := store.Get(k); err != nil {
+				return false, err
+			} else if ok {
+				return false, nil
 			}
 			store.Set(k, v)
-			return true
+			return true, nil
 		},
 	)
 }
 
-func (sH stateHandler[K, V]) load(k K) (V, bool) {
+func (sH stateHandler[K, V]) load(k K) (V, bool, error) {
 	type res struct {
 		v  V
 		ok bool
 	}
-	ret := matchStore(sH.stateStore,
-		func(store casStore[K]) res {
-			v, ok := store.Load(k)
-			if !ok {
-				return res{v: *new(V), ok: false}
+	ret, err := matchStore(sH.stateStore,
+		func(store casStore[K]) (res, error) {
+			v, ok, err := store.Load(k)
+			if err != nil {
+				return *new(res), err
 			}
-			return res{v: v.(V), ok: ok}
+			if !ok {
+				return res{v: *new(V), ok: false}, nil
+			}
+			return res{v: v.(V), ok: ok}, nil
 		},
-		func(store setStore[K]) res {
-			v, ok := store.Get(k)
-			if !ok {
-				return res{v: *new(V), ok: false}
+		func(store setStore[K]) (res, error) {
+			v, ok, err := store.Get(k)
+			if err != nil {
+				return *new(res), err
 			}
-			return res{v: v.(V), ok: ok}
+			if !ok {
+				return res{v: *new(V), ok: false}, nil
+			}
+			return res{v: v.(V), ok: ok}, nil
 		},
 	)
-	return ret.v, ret.ok
+	return ret.v, ret.ok, err
 }
 
 // handle routes the given payload to the appropriate state operation logic.
@@ -243,7 +251,11 @@ func (sH stateHandler[K, V]) handle(ctx context.Context, payload Payload) (res a
 				res = res.(bool) || dres.(bool)
 			}()
 		}
-		if swapped := sH.compareAndSwap(payload.Key, payload.Old, payload.New); !swapped {
+		var swapped bool
+		if swapped, err = sH.compareAndSwap(payload.Key, payload.Old, payload.New); err != nil {
+			res = false
+			return
+		} else if !swapped {
 			res = false
 			err = nil
 			return
@@ -269,7 +281,11 @@ func (sH stateHandler[K, V]) handle(ctx context.Context, payload Payload) (res a
 				res = res.(bool) || dres.(bool)
 			}()
 		}
-		if deleted := sH.compareAndDelete(payload.Key, payload.Old); !deleted {
+		var deleted bool
+		if deleted, err = sH.compareAndDelete(payload.Key, payload.Old); err != nil {
+			res = false
+			return
+		} else if !deleted {
 			res = false
 			err = nil
 			return
@@ -309,8 +325,7 @@ func (sH stateHandler[K, V]) handle(ctx context.Context, payload Payload) (res a
 				}
 			}()
 		}
-		res = sH.insertIfAbsent(payload.Key, payload.New)
-		err = nil
+		res, err = sH.insertIfAbsent(payload.Key, payload.New)
 		payloadWithTimeSpan := statePayloadWithNow(payload)
 		concurrency.Effect(ctx, func(ctx context.Context) {
 			select {
@@ -322,7 +337,10 @@ func (sH stateHandler[K, V]) handle(ctx context.Context, payload Payload) (res a
 		return
 
 	case Load[K]:
-		v, ok := sH.load(payload.Key)
+		v, ok, err := sH.load(payload.Key)
+		if err != nil {
+			return *new(V), err
+		}
 		if ok {
 			return v, nil
 		}
@@ -334,7 +352,10 @@ func (sH stateHandler[K, V]) handle(ctx context.Context, payload Payload) (res a
 		}
 
 	case loadWoDelegation[K]:
-		v, ok := sH.load(payload.Key)
+		v, ok, err := sH.load(payload.Key)
+		if err != nil {
+			return *new(V), err
+		}
 		if ok {
 			return v, nil
 		}
