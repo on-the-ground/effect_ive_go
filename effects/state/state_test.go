@@ -10,6 +10,7 @@ import (
 
 	"github.com/on-the-ground/effect_ive_go/effects/log"
 	"github.com/on-the-ground/effect_ive_go/effects/state"
+	"github.com/on-the-ground/effect_ive_go/effects/stream"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -353,6 +354,9 @@ func TestStateEffect_SourcePayloadReturnsSink(t *testing.T) {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
+		ctx, endOfStreamHandler := stream.WithEffectHandler[state.TimeBoundedPayload](ctx, 1)
+		defer endOfStreamHandler()
+
 		ctx, endOfStateHandler := state.WithEffectHandler[string, string](
 			ctx,
 			8, 8,
@@ -363,8 +367,10 @@ func TestStateEffect_SourcePayloadReturnsSink(t *testing.T) {
 		defer endOfStateHandler()
 
 		// 1. Get src channel from SourceStatePayload
-		src, err := state.EffectSource(ctx)
-		require.NoError(t, err)
+		src := make(chan state.TimeBoundedPayload, 10)
+		dropped := make(chan state.TimeBoundedPayload)
+
+		state.EffectSubscribeSource(ctx, src, dropped)
 
 		// 2. Send a InsertPaylod
 		key := "test-key"

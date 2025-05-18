@@ -52,7 +52,7 @@ func WithEffectHandler[K comparable, V ComparableEquatable](
 	)
 }
 
-func EffectSource(ctx context.Context) (chan TimeBoundedPayload, error) {
+func effectSource(ctx context.Context) (chan TimeBoundedPayload, error) {
 	return helper.GetTypedValueOf[chan TimeBoundedPayload](func() (any, error) {
 		return effect(ctx, Source{})
 	})

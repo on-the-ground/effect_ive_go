@@ -135,12 +135,13 @@ func EffectMerge[T any](
 
 func EffectSubscribe[T any](
 	ctx context.Context,
-	Source SourceAsKey[T],
-	Target *sinkDropPair[T],
+	source SourceAsKey[T],
+	sink chan<- T,
+	dropped chan<- T,
 ) {
 	effects.FireAndForgetEffect(ctx, effectmodel.EffectStream, subscribePayload[T]{
-		Source: Source,
-		Target: Target,
+		Source: source,
+		Target: newSinkDropPair(sink, dropped),
 	})
 }
 
