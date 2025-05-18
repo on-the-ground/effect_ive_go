@@ -10,6 +10,7 @@ import (
 	"github.com/on-the-ground/effect_ive_go/effects/concurrency"
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 	"github.com/on-the-ground/effect_ive_go/effects/log"
+	"github.com/on-the-ground/effect_ive_go/shared"
 	"github.com/on-the-ground/effect_ive_go/shared/helper"
 )
 
@@ -375,11 +376,11 @@ func (sH stateHandler[K, V]) handle(ctx context.Context, payload Payload) (res a
 // TimeBoundedPayload is a wrapper for StatePayload with a time span.
 type TimeBoundedPayload struct {
 	Payload
-	effects.TimeSpan
+	shared.TimeSpan
 }
 
 func statePayloadWithNow(payload Payload) TimeBoundedPayload {
-	return TimeBoundedPayload{Payload: payload, TimeSpan: effects.Now()}
+	return TimeBoundedPayload{Payload: payload, TimeSpan: shared.Now()}
 }
 
 func tryToUpdate[K comparable, V ComparableEquatable](ctx context.Context, payload InsertIfAbsent[K, V]) error {
