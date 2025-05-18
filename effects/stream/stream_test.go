@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+var capacityOfDropped = 1000
+
 func TestStreamEffect_MapFilterMerge(t *testing.T) {
 	ctx := context.Background()
 	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
@@ -160,16 +162,14 @@ func TestSubscribeStreamPayload_OneSinkReceivesEvent(t *testing.T) {
 
 	source := make(chan int, 1)
 	sink := make(chan int, 1)
-	dropped := make(chan int, stream.MinCapacityOfDroppedChannel)
+	dropped := make(chan int, capacityOfDropped)
 
 	// 1. Subscribe sink
 	stream.EffectSubscribe(
 		ctx,
 		source,
-		stream.NewSinkDropPair(
-			sink,
-			chan<- int(dropped),
-		),
+		sink,
+		chan<- int(dropped),
 	)
 
 	// 2. Allow registration to stabilize
@@ -210,27 +210,23 @@ func TestSubscribeStreamPayload_MultipleSinksSequentiallyReceiveEvent(t *testing
 	defer endOfStreamHandler()
 
 	source := make(chan int, 2)
-	sink1 := make(chan int, stream.MinCapacityOfDroppedChannel)
-	sink2 := make(chan int, stream.MinCapacityOfDroppedChannel)
-	dropped := make(chan int, stream.MinCapacityOfDroppedChannel)
+	sink1 := make(chan int, capacityOfDropped)
+	sink2 := make(chan int, capacityOfDropped)
+	dropped := make(chan int, capacityOfDropped)
 
 	// 1. Subscribe sinks
 	stream.EffectSubscribe(
 		ctx,
 		source,
-		stream.NewSinkDropPair(
-			sink1,
-			dropped,
-		),
+		sink1,
+		dropped,
 	)
 
 	stream.EffectSubscribe(
 		ctx,
 		source,
-		stream.NewSinkDropPair(
-			sink2,
-			dropped,
-		),
+		sink2,
+		dropped,
 	)
 
 	// 2. Allow registration to stabilize
