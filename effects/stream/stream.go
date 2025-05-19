@@ -22,7 +22,7 @@ func WithEffectHandler[T any](parentCtx context.Context, bufferSize int) (contex
 	reg := channelRegistry[T]{
 		Map: &sync.Map{},
 	}
-	ctx, endOfStreamHandler := effects.WithFireAndForgetEffectHandler(
+	ctx, endOfStreamHandler := effects.WithResumableEffectHandler(
 		ctx,
 		bufferSize,
 		effectmodel.EffectStream,
@@ -139,7 +139,7 @@ func EffectSubscribe[T any](
 	sink chan<- T,
 	dropped chan<- T,
 ) {
-	effects.FireAndForgetEffect(ctx, effectmodel.EffectStream, subscribePayload[T]{
+	effects.PerformResumableEffect[subscribePayload[T], struct{}](ctx, effectmodel.EffectStream, subscribePayload[T]{
 		Source: source,
 		Target: newSinkDropPair(sink, dropped),
 	})
@@ -187,7 +187,7 @@ type channelRegistry[T any] struct {
 	*sync.Map
 }
 
-func (reg channelRegistry[T]) handleSubscriptionEffect(ctx context.Context, msg subscribePayload[T]) {
+func (reg channelRegistry[T]) handleSubscriptionEffect(ctx context.Context, msg subscribePayload[T]) (struct{}, error) {
 	var firstSink bool
 
 	raw, ok := reg.Load(msg.Source.String())
@@ -208,7 +208,7 @@ func (reg channelRegistry[T]) handleSubscriptionEffect(ctx context.Context, msg 
 			}()
 			reg.arbit(ctx, msg.Source)
 		})
-		return
+		return struct{}{}, nil
 	}
 
 	oldSinks, ok := raw.(*RegisteredList[T])
@@ -216,7 +216,7 @@ func (reg channelRegistry[T]) handleSubscriptionEffect(ctx context.Context, msg 
 		log.Effect(ctx, log.LogError, "fail to cast sinks", map[string]interface{}{
 			"key": msg.Source,
 		})
-		return
+		return struct{}{}, nil
 	}
 
 	tryRegisterSink := func() error {
@@ -241,14 +241,14 @@ func (reg channelRegistry[T]) handleSubscriptionEffect(ctx context.Context, msg 
 	}
 
 	maxAttemps := 5
-	if err := helper.Retry(maxAttemps, tryRegisterSink); err != nil {
+	err := helper.Retry(maxAttemps, tryRegisterSink)
+	if err != nil {
 		log.Effect(ctx, log.LogError, "fail to append new sink after max attempts", map[string]interface{}{
 			"error": err,
 			"key":   msg.Source,
 		})
-		return
 	}
-
+	return struct{}{}, err
 }
 
 func (reg *channelRegistry[T]) arbit(ctx context.Context, source SourceAsKey[T]) {
