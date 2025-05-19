@@ -9,7 +9,7 @@ import (
 	"github.com/on-the-ground/effect_ive_go/effects/log"
 )
 
-// WithEffectHandler installs a fire-and-forget concurrency effect handler.
+// WithEffectHandler installs a resumable concurrency effect handler.
 //
 // It allows `Effect(ctx, [...])` to spawn multiple goroutines under managed scope.
 //
@@ -33,7 +33,7 @@ func WithEffectHandler(
 	}
 	sv.watchParentCancel(ctx)
 
-	ctx, endOfConcurrencyHandler := effects.WithFireAndForgetEffectHandler(
+	ctx, endOfConcurrencyHandler := effects.WithResumableEffectHandler(
 		ctx,
 		bufferSize,
 		effectmodel.EffectConcurrency,
@@ -47,7 +47,7 @@ func WithEffectHandler(
 	return ctx, endOfConcurrencyHandler
 }
 
-// WithEffectHandler installs a fire-and-forget concurrency effect handler.
+// WithEffectHandler installs a resumable concurrency effect handler.
 //
 // It allows `Effect(ctx, [...])` to spawn multiple goroutines under managed scope.
 //
@@ -55,7 +55,7 @@ func WithEffectHandler(
 // - WaitGroup + cancellation tracking ensures children are joined on shutdown.
 // - Worker count is fixed to 1 (non-partitioned).
 func Effect(ctx context.Context, fns ...func(context.Context)) {
-	effects.FireAndForgetEffect[Payload](ctx, effectmodel.EffectConcurrency, fns)
+	<-effects.PerformResumableEffect[Payload, struct{}](ctx, effectmodel.EffectConcurrency, fns)
 }
 
 type Payload []func(context.Context)
@@ -118,7 +118,7 @@ func (s *supervisor) appendCancel(cancelFn context.CancelFunc) {
 func (s *supervisor) spawnConcurrentChildren(
 	parentContext context.Context,
 	functions Payload,
-) {
+) (struct{}, error) {
 	ready := sync.WaitGroup{}
 
 	for _, fn := range functions {
@@ -143,6 +143,8 @@ func (s *supervisor) spawnConcurrentChildren(
 
 	// Wait until all child goroutines have been started before returning
 	ready.Wait()
+
+	return struct{}{}, nil
 }
 
 // waitChildren blocks until all child goroutines complete or the context is cancelled.
