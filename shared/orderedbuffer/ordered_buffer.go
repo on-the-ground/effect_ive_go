@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"sync"
 	"sync/atomic"
 )
 
@@ -12,6 +13,8 @@ var ErrClosedBuffer = errors.New("buffer is closed")
 type CompareFunc[T any] func(a, b T) int
 
 type OrderedBoundedBuffer[T any] struct {
+	mu sync.Mutex
+
 	data      []T
 	maxBufLen int
 	compare   CompareFunc[T]
@@ -34,7 +37,8 @@ func (b *OrderedBoundedBuffer[T]) Insert(ctx context.Context, val T) bool {
 		return false
 	}
 
-	// 이진 탐색 후 삽입
+	b.mu.Lock()
+
 	idx := sort.Search(len(b.data), func(i int) bool {
 		return b.compare(val, b.data[i]) < 0
 	})
@@ -43,14 +47,20 @@ func (b *OrderedBoundedBuffer[T]) Insert(ctx context.Context, val T) bool {
 	copy(b.data[idx+1:], b.data[idx:])
 	b.data[idx] = val
 
-	// eviction 발생 시 가장 앞 항목을 sink로 보냄
+	var evictedVal T
+	evicted := false
 	if len(b.data) > b.maxBufLen {
-		evicted := b.data[0]
+		evictedVal = b.data[0]
 		b.data = b.data[1:]
+		evicted = true
+	}
+
+	b.mu.Unlock()
+
+	if evicted {
 		select {
 		case <-ctx.Done():
-			return false
-		case b.sink <- evicted:
+		case b.sink <- evictedVal:
 		}
 	}
 
@@ -62,7 +72,6 @@ func (b *OrderedBoundedBuffer[T]) Source() <-chan T {
 }
 
 func (b *OrderedBoundedBuffer[T]) Close(ctx context.Context) {
-	// 이미 닫혀 있으면 중복 호출 무시
 	if !b.closed.CompareAndSwap(false, true) {
 		return
 	}
