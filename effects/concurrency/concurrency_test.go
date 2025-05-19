@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/on-the-ground/effect_ive_go/effects/concurrency"
+	"github.com/on-the-ground/effect_ive_go/effects/internal/handlers"
 	"github.com/on-the-ground/effect_ive_go/effects/log"
+	"github.com/stretchr/testify/require"
 )
 
 func TestConcurrencyEffect_AllChildrenRunAndComplete(t *testing.T) {
@@ -203,4 +205,72 @@ func TestConcurrencyEffect_SpawnsAndCleansUpAll(t *testing.T) {
 	if !slices.Equal(results, want) {
 		t.Errorf("Expected %v, got %v", want, results)
 	}
+}
+
+func TestAwaitAll_Success(t *testing.T) {
+	ctx := context.Background()
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
+	defer endOfLogHandler()
+
+	ch1 := make(chan handlers.ResumableResult[concurrency.Payload], 1)
+	ch2 := make(chan handlers.ResumableResult[concurrency.Payload], 1)
+
+	ch1 <- handlers.ResumableResult[concurrency.Payload]{Value: concurrency.Payload{func(context.Context) {}}, Err: nil}
+	close(ch1)
+
+	ch2 <- handlers.ResumableResult[concurrency.Payload]{Value: concurrency.Payload{func(context.Context) {}}, Err: nil}
+	close(ch2)
+
+	ctx, endOfConcurrencyHandler := concurrency.WithEffectHandler(ctx, 1)
+	defer endOfConcurrencyHandler()
+
+	results, errs := concurrency.AwaitAll(ctx, ch1, ch2)
+
+	if len(results) != 2 || len(errs) != 2 {
+		t.Fatalf("expected 2 results and 2 errors, got %d and %d", len(results), len(errs))
+	}
+	for i, err := range errs {
+		if err != nil {
+			t.Errorf("expected nil error at index %d, got %v", i, err)
+		}
+	}
+}
+
+func TestAwaitAll_ClosedChannel(t *testing.T) {
+	ctx := context.Background()
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
+	defer endOfLogHandler()
+
+	ch := make(chan handlers.ResumableResult[concurrency.Payload])
+	close(ch)
+
+	results, errs := concurrency.AwaitAll(ctx, ch)
+
+	require.Equal(t, 1, len(results))
+	require.Equal(t, 1, len(errs))
+
+}
+
+func TestAwaitAll_CancelledContext(t *testing.T) {
+	ctx := context.Background()
+
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
+	defer endOfLogHandler()
+
+	ctx, cancel := context.WithCancel(ctx)
+	ch := make(chan handlers.ResumableResult[concurrency.Payload])
+
+	ctx, endOfConcurrencyHandler := concurrency.WithEffectHandler(ctx, 1)
+	defer endOfConcurrencyHandler()
+
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		cancel()
+	}()
+
+	results, errs := concurrency.AwaitAll(ctx, ch)
+
+	require.Equal(t, 1, len(results))
+	require.Equal(t, 1, len(errs))
+	require.ErrorIs(t, errs[0], context.Canceled)
 }
