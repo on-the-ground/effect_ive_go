@@ -34,7 +34,7 @@ func TestStateEffect_BasicLookup(t *testing.T) {
 		)
 		defer endOfStateHandler()
 
-		v, err := state.LoadEffect[string, int](ctx, "foo")
+		v, err := state.LoadOverlaidEffect[string, int](ctx, "foo")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -68,7 +68,7 @@ func TestStateEffect_KeyNotFound(t *testing.T) {
 		)
 		defer endOfStateHandler()
 
-		_, err := state.LoadEffect[string, int](ctx, "bar")
+		_, err := state.LoadOverlaidEffect[string, int](ctx, "bar")
 		if err == nil || !strings.Contains(err.Error(), "key not found") {
 			t.Fatalf("expected key-not-found error, got: %v", err)
 		}
@@ -110,7 +110,7 @@ func TestStateEffect_DelegatesToUpperScope(t *testing.T) {
 		)
 		defer lowerClose()
 
-		v, err := state.LoadEffect[string, any](lowerCtx, "upper")
+		v, err := state.LoadOverlaidEffect[string, any](lowerCtx, "upper")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -166,7 +166,7 @@ func TestStateEffect_ConcurrentPartitionedAccess(t *testing.T) {
 				keyIdx := i % len(states) // deterministic but shuffled
 				key := fmt.Sprintf("key%d", keyIdx)
 
-				v, err := state.LoadEffect[string, string](ctx, key)
+				v, err := state.LoadOverlaidEffect[string, string](ctx, key)
 				mu.Lock()
 				defer mu.Unlock()
 
@@ -232,7 +232,7 @@ func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 				key := fmt.Sprintf("key%d", i%10)
 
 				// Load current value
-				v, _ := state.LoadEffect[string, any](ctx, key)
+				v, _ := state.LoadOverlaidEffect[string, any](ctx, key)
 
 				switch i % 4 {
 				case 0:
@@ -260,7 +260,7 @@ func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 
 				case 3:
 					// Just load again to add read load
-					_, _ = state.LoadEffect[string, any](ctx, key)
+					_, _ = state.LoadOverlaidEffect[string, any](ctx, key)
 				}
 			}(i)
 		}
@@ -296,7 +296,7 @@ func TestStateEffect_ContextTimeout(t *testing.T) {
 
 		time.Sleep(1 * time.Millisecond) // allow timeout to occur
 
-		res, err := state.LoadEffect[string, any](timeoutCtx, "any")
+		res, err := state.LoadOverlaidEffect[string, any](timeoutCtx, "any")
 		log.Effect(ctx, log.LogInfo, "final result", map[string]interface{}{
 			"res": res,
 			"err": err,
@@ -326,7 +326,7 @@ func TestStateEffect_SetAndGet(t *testing.T) {
 		)
 		defer endOfStateHandler()
 
-		old, _ := state.LoadEffect[string, int](ctx, "foo")
+		old, _ := state.LoadOverlaidEffect[string, int](ctx, "foo")
 		inserted, err := state.InsertIfAbsentEffect(ctx, "foo", 777)
 		require.NoError(t, err)
 		require.True(t, inserted)
@@ -335,14 +335,115 @@ func TestStateEffect_SetAndGet(t *testing.T) {
 			"new": 777,
 		})
 
-		_, err = state.LoadEffect[string, int](ctx, "foo")
+		_, err = state.LoadOverlaidEffect[string, int](ctx, "foo")
 		assert.NoError(t, err)
 	}
 
 	for _, store := range []state.StateStore{state.NewInMemoryStore[string](), newTestSetStore[string]()} {
 		testFn(store)
 	}
+}
 
+func TestInsertIfAbsentWithExpiryEffect(t *testing.T) {
+	ctx := context.Background()
+	ctx, endOfLog := log.WithTestEffectHandler(ctx)
+	defer endOfLog()
+
+	testFn := func(store state.StateStore) {
+		ctx, endOfState := state.WithEffectHandler[string, string](
+			ctx,
+			1, 1,
+			false,
+			store,
+			nil,
+		)
+		defer endOfState()
+
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		key := "poison:tile:3"
+		val := "toxic"
+
+		inserted, err := state.InsertIfAbsentWithTTLEffect(ctx, key, val, 300*time.Millisecond)
+		require.NoError(t, err)
+		require.True(t, inserted)
+
+		// 최초 삽입 직후엔 값이 있어야 함
+		v, err := state.LoadEffect[string, string](ctx, key)
+		require.NoError(t, err)
+		assert.Equal(t, val, v)
+
+		// 만료 후엔 값이 없어야 함
+		time.Sleep(400 * time.Millisecond)
+		v, err = state.LoadEffect[string, string](ctx, key)
+		require.Error(t, err)
+		assert.Zero(t, v)
+
+	}
+
+	for _, store := range []state.StateStore{
+		state.NewInMemoryStore[string](),
+		newTestSetStore[string](),
+	} {
+		testFn(store)
+	}
+}
+
+func TestResetTTL_ExtendsLifetime(t *testing.T) {
+	ctx := context.Background()
+	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
+	defer endOfLogHandler()
+
+	testFn := func(store state.StateStore) {
+		ctx, endOfStateHandler := state.WithEffectHandler[string, string](
+			ctx,
+			1, 1,
+			false,
+			store,
+			nil,
+		)
+		defer endOfStateHandler()
+
+		key := "poison:tile:999"
+		val := "venom"
+		ttl := 200 * time.Millisecond
+		extended := 300 * time.Millisecond
+
+		// Insert with initial TTL
+		inserted, err := state.InsertIfAbsentWithTTLEffect(ctx, key, val, ttl)
+		require.NoError(t, err)
+		require.True(t, inserted)
+
+		// Reset TTL before original TTL expires
+		time.Sleep(100 * time.Millisecond)
+		reset, err := state.ResetTTLEffect(ctx, key, extended)
+		require.NoError(t, err)
+		require.True(t, reset)
+
+		// Sleep past original ttl but before extended ttl
+		time.Sleep(150 * time.Millisecond)
+
+		// Should still be present
+		v, err := state.LoadEffect[string, string](ctx, key)
+		assert.NoError(t, err)
+		assert.Equal(t, val, v)
+
+		// Wait until after extended ttl
+		time.Sleep(200 * time.Millisecond)
+
+		// Should be expired now
+		v, err = state.LoadEffect[string, string](ctx, key)
+		assert.Error(t, err)
+		assert.Zero(t, v)
+	}
+
+	for _, store := range []state.StateStore{
+		state.NewInMemoryStore[string](),
+		newTestSetStore[string](), // assuming you have this
+	} {
+		testFn(store)
+	}
 }
 
 func TestStateEffect_SourcePayloadReturnsSink(t *testing.T) {
@@ -456,17 +557,17 @@ func TestStore_Delegation(t *testing.T) {
 		assert.NoError(t, err, "Store delegation failed")
 
 		// Confirm that new value is set
-		val, err := state.LoadEffect[string, int](ctx0, "x")
+		val, err := state.LoadOverlaidEffect[string, int](ctx0, "x")
 		assert.NoError(t, err, "Load failed")
 		assert.Equal(t, val, 2, "Expected x=2")
 
 		// Confirm that new value is set
-		val, err = state.LoadEffect[string, int](ctx1, "x")
+		val, err = state.LoadOverlaidEffect[string, int](ctx1, "x")
 		assert.NoError(t, err, "Load failed")
 		assert.Equal(t, val, 2, "Expected x=2")
 
 		// Confirm that prev value is set
-		_, err = state.LoadEffect[string, int](ctx2, "x")
+		_, err = state.LoadOverlaidEffect[string, int](ctx2, "x")
 		assert.ErrorIs(t, err, state.ErrNoSuchKey, "should be no such key")
 	}
 
@@ -524,17 +625,17 @@ func TestCompareAndSwap_Delegation(t *testing.T) {
 		assert.True(t, ok, "CAS delegation returned false, expected true")
 
 		// Confirm that new value is set
-		val, err := state.LoadEffect[string, int](ctx0, "x")
+		val, err := state.LoadOverlaidEffect[string, int](ctx0, "x")
 		assert.NoError(t, err, "Load failed")
 		assert.Equal(t, val, 2, "Expected x=2")
 
 		// Confirm that new value is set
-		val, err = state.LoadEffect[string, int](ctx1, "x")
+		val, err = state.LoadOverlaidEffect[string, int](ctx1, "x")
 		assert.NoError(t, err, "Load failed")
 		assert.Equal(t, val, 2, "Expected x=2")
 
 		// Confirm that prev value is set
-		val, err = state.LoadEffect[string, int](ctx2, "x")
+		val, err = state.LoadOverlaidEffect[string, int](ctx2, "x")
 		assert.NoError(t, err, "Load failed")
 		assert.Equal(t, val, 1, "Expected x=1")
 	}
@@ -596,7 +697,7 @@ func TestCompareAndDelete_Delegation(t *testing.T) {
 		assert.True(t, ok, "CAD delegation returned false, expected true")
 
 		// Confirm that prev value is set
-		val, err := state.LoadEffect[string, int](ctx2, "y")
+		val, err := state.LoadOverlaidEffect[string, int](ctx2, "y")
 		assert.NoError(t, err, "Load failed")
 		assert.Equal(t, val, 98, "Expected y=99")
 	}
@@ -630,7 +731,7 @@ func TestInsertIfAbsent_DelegationConflict_CAS_Success(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Upper value should be updated to "new"
-	v, err := state.LoadEffect[string, string](upperCtx, "conflict")
+	v, err := state.LoadOverlaidEffect[string, string](upperCtx, "conflict")
 	assert.NoError(t, err)
 	assert.Equal(t, "new", v)
 }
@@ -672,7 +773,7 @@ func TestInsertIfAbsent_DelegationConflict_CAS_Success_2(t *testing.T) {
 	<-done
 
 	// Final value should be "external", not "v2"
-	v, err := state.LoadEffect[string, string](upperCtx, "x")
+	v, err := state.LoadOverlaidEffect[string, string](upperCtx, "x")
 	assert.NoError(t, err)
 	assert.Equal(t, "v2", v)
 }
@@ -697,7 +798,7 @@ func TestInsertIfAbsent_DelegationConflict_EqualValues_Skip(t *testing.T) {
 	assert.True(t, ok)
 	assert.NoError(t, err)
 
-	v, err := state.LoadEffect[string, string](upperCtx, "idempotent")
+	v, err := state.LoadOverlaidEffect[string, string](upperCtx, "idempotent")
 	assert.NoError(t, err)
 	assert.Equal(t, "same", v)
 }

@@ -34,6 +34,7 @@ func WithEffectHandler[K comparable, V ComparableEquatable](
 	sink := make(chan TimeBoundedPayload, 2*numWorkers)
 	stateHandler := &stateHandler[K, V]{
 		stateStore: stateStore,
+		timers:     make(map[K]*time.Timer),
 		sink:       sink,
 		delegation: delegation,
 	}
@@ -58,12 +59,15 @@ func effectSource(ctx context.Context) (chan TimeBoundedPayload, error) {
 	})
 }
 
-func LoadEffect[K comparable, V ComparableEquatable](
-	ctx context.Context,
-	key K,
-) (val V, err error) {
+func LoadOverlaidEffect[K comparable, V ComparableEquatable](ctx context.Context, key K) (val V, err error) {
 	return helper.GetTypedValueOf[V](func() (any, error) {
 		return effect(ctx, load[K]{Key: key})
+	})
+}
+
+func LoadEffect[K comparable, V ComparableEquatable](ctx context.Context, key K) (val V, err error) {
+	return helper.GetTypedValueOf[V](func() (any, error) {
+		return effect(ctx, loadWoDelegation[K]{Key: key})
 	})
 }
 
@@ -76,6 +80,36 @@ func InsertIfAbsentEffect[K comparable, V ComparableEquatable](
 		return effect(ctx, InsertIfAbsent[K, V]{
 			Key: key,
 			New: new,
+		})
+	})
+}
+
+func InsertIfAbsentWithTTLEffect[K comparable, V ComparableEquatable](
+	ctx context.Context,
+	key K,
+	new V,
+	ttl time.Duration,
+) (inserted bool, err error) {
+
+	inserted, err = InsertIfAbsentEffect(ctx, key, new)
+	if inserted {
+		effect(ctx, setTTL[K]{
+			Key: key,
+			TTL: ttl,
+		})
+	}
+	return
+}
+
+func ResetTTLEffect[K comparable](
+	ctx context.Context,
+	key K,
+	ttl time.Duration,
+) (reset bool, err error) {
+	return helper.GetTypedValueOf[bool](func() (any, error) {
+		return effect(ctx, resetTTL[K]{
+			Key: key,
+			TTL: ttl,
 		})
 	})
 }
@@ -149,6 +183,7 @@ func delegateStateEffect(upperCtx context.Context, payload Payload) (res any, er
 // It supports safe concurrent access and fallback to upstream handler if key is missing.
 type stateHandler[K comparable, V ComparableEquatable] struct {
 	stateStore StateStore
+	timers     map[K]*time.Timer
 	sink       chan TimeBoundedPayload
 	delegation bool
 }
@@ -161,7 +196,7 @@ func (sH stateHandler[K, V]) compareAndSwap(k K, old, new V) (bool, error) {
 		func(store setStore[K]) (bool, error) {
 			if cur, ok, err := store.Get(k); !ok || err != nil {
 				return false, err
-			} else if Equals(cur, old) {
+			} else if !Equals(cur, old) {
 				return false, nil
 			} else {
 				store.Set(k, new)
@@ -179,7 +214,7 @@ func (sH stateHandler[K, V]) compareAndDelete(k K, old V) (bool, error) {
 		func(store setStore[K]) (bool, error) {
 			if cur, ok, err := store.Get(k); !ok || err != nil {
 				return false, err
-			} else if Equals(cur, old) {
+			} else if !Equals(cur, old) {
 				return false, nil
 			} else {
 				store.Delete(k)
@@ -239,6 +274,86 @@ func (sH stateHandler[K, V]) load(k K) (V, bool, error) {
 // handle routes the given payload to the appropriate state operation logic.
 func (sH stateHandler[K, V]) handle(ctx context.Context, payload Payload) (res any, err error) {
 	switch payload := payload.(type) {
+
+	case setTTL[K]:
+		key := payload.Key
+		ttl := payload.TTL
+		timer := time.NewTimer(ttl)
+
+		// If the timer is done, we need to delete the key from the state store.
+		concurrency.Effect(ctx, func(svCtx context.Context) {
+			defer log.Effect(ctx, log.LogDebug, "Expiry handler finished", map[string]interface{}{
+				"key": key,
+				"ttl": ttl,
+			})
+			defer timer.Stop()
+
+			log.Effect(ctx, log.LogDebug, "Expiry handler started", map[string]interface{}{
+				"key": key,
+				"ttl": ttl,
+			})
+
+			select {
+			case <-svCtx.Done():
+			case <-timer.C:
+				old, err := helper.GetTypedValueOf[V](func() (any, error) {
+					return sH.handle(ctx, load[K]{Key: key})
+				})
+				log.Effect(ctx, log.LogDebug, "loaded value before cas", map[string]interface{}{
+					"key":   key,
+					"value": fmt.Sprintf("%#v", old),
+				})
+				if err != nil {
+					log.Effect(ctx, log.LogError, "fail to load value from parent handler", map[string]interface{}{
+						"key": key,
+						"err": err,
+					})
+				}
+
+				deleted, err := helper.GetTypedValueOf[bool](func() (any, error) {
+					return sH.handle(ctx, CompareAndDelete[K, V]{Key: key, Old: old})
+				})
+				if err != nil {
+					log.Effect(ctx, log.LogError, "fail to delete old value of parent handler", map[string]interface{}{
+						"key": key,
+						"err": err,
+					})
+				}
+				if !deleted {
+					log.Effect(ctx, log.LogInfo, "cas failed, will retry", map[string]interface{}{
+						"key":    key,
+						"old":    old,
+						"status": "cas_mismatch",
+					})
+				}
+				log.Effect(ctx, log.LogInfo, "deleted value of parent handler", map[string]interface{}{
+					"key":    key,
+					"old":    old,
+					"status": "deleted",
+				})
+			}
+		})
+		sH.timers[key] = timer
+		res = true
+		err = nil
+		return
+
+	case resetTTL[K]:
+		timer, ok := sH.timers[payload.Key]
+		if !ok {
+			return nil, fmt.Errorf("timer not found for key: %v", payload.Key)
+		}
+
+		if !timer.Stop() {
+			// drain timer.C to avoid race
+			select {
+			case <-timer.C:
+			default:
+			}
+		}
+
+		timer.Reset(payload.TTL)
+		return true, nil
 
 	case compareAndSwap[K, V]:
 		if Equals(payload.Old, payload.New) {
@@ -347,7 +462,7 @@ func (sH stateHandler[K, V]) handle(ctx context.Context, payload Payload) (res a
 		}
 		if v, err := delegateStateEffect(ctx, payload); err != nil {
 			return nil, ErrNoSuchKey
-		} else {
+		} else if sH.delegation {
 			sH.insertIfAbsent(payload.Key, v.(V))
 			return v, nil
 		}
@@ -371,6 +486,7 @@ func (sH stateHandler[K, V]) handle(ctx context.Context, payload Payload) (res a
 		// This is a bug in the code.
 		panic(fmt.Errorf("invalid state operation type: %T", payload))
 	}
+	return
 }
 
 // TimeBoundedPayload is a wrapper for StatePayload with a time span.
