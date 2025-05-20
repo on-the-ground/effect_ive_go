@@ -63,7 +63,7 @@ func LoadEffect[K comparable, V ComparableEquatable](
 	key K,
 ) (val V, err error) {
 	return helper.GetTypedValueOf[V](func() (any, error) {
-		return effect(ctx, Load[K]{Key: key})
+		return effect(ctx, load[K]{Key: key})
 	})
 }
 
@@ -99,7 +99,7 @@ func CompareAndSwapEffect[K comparable, V ComparableEquatable](
 	old, new V,
 ) (swapped bool, err error) {
 	return helper.GetTypedValueOf[bool](func() (any, error) {
-		return effect(ctx, CompareAndSwap[K, V]{
+		return effect(ctx, compareAndSwap[K, V]{
 			Key: key,
 			Old: old,
 			New: new,
@@ -240,7 +240,7 @@ func (sH stateHandler[K, V]) load(k K) (V, bool, error) {
 func (sH stateHandler[K, V]) handle(ctx context.Context, payload Payload) (res any, err error) {
 	switch payload := payload.(type) {
 
-	case CompareAndSwap[K, V]:
+	case compareAndSwap[K, V]:
 		if Equals(payload.Old, payload.New) {
 			res = true
 			err = nil
@@ -337,7 +337,7 @@ func (sH stateHandler[K, V]) handle(ctx context.Context, payload Payload) (res a
 		})
 		return
 
-	case Load[K]:
+	case load[K]:
 		v, ok, err := sH.load(payload.Key)
 		if err != nil {
 			return *new(V), err

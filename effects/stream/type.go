@@ -20,11 +20,10 @@ func (p unsubscribePayload[T]) PartitionKey() string {
 
 func (p unsubscribePayload[T]) sealedStreamPayload() {}
 
-func newUnsubscribePayload[T any](source SourceAsKey[T], sink, dropped chan<- T) payload[T] {
+func newUnsubscribePayload[T any](source SourceAsKey[T], sink chan<- T) payload[T] {
 	return unsubscribePayload[T]{
-		Source:  source,
-		Sink:    sink,
-		Dropped: dropped,
+		Source: source,
+		Sink:   sink,
 	}
 }
 

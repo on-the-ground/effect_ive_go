@@ -13,18 +13,18 @@ type Source struct{}
 func (Source) PartitionKey() string { return "" }
 func (Source) payload()             {}
 
-// Load is the payload type for retrieving a value from the state.
-type Load[K comparable] struct {
+// load is the payload type for retrieving a value from the state.
+type load[K comparable] struct {
 	Key K // should be comparable
 }
 
 // PartitionKey returns the partition key for routing this payload.
-func (p Load[K]) PartitionKey() string {
+func (p load[K]) PartitionKey() string {
 	return fmt.Sprintf("%v", p.Key)
 }
 
 // payload prevents external packages from implementing statePayload.
-func (p Load[K]) payload() {}
+func (p load[K]) payload() {}
 
 // loadWoDelegation is the payload type for retrieving a value from the state without delegation.
 type loadWoDelegation[K comparable] struct {
@@ -58,15 +58,15 @@ func (p InsertIfAbsent[K, V]) PartitionKey() string {
 }
 func (p InsertIfAbsent[K, V]) payload() {}
 
-// CompareAndSwap is the payload type for inserting or updating a key-value pair.
-type CompareAndSwap[K comparable, V ComparableEquatable] struct {
+// compareAndSwap is the payload type for inserting or updating a key-value pair.
+type compareAndSwap[K comparable, V ComparableEquatable] struct {
 	Key K // should be comparable
 	New V // should be comparable
 	Old V // should be comparable
 }
 
-func (p CompareAndSwap[K, V]) PartitionKey() string { return fmt.Sprintf("%v", p.Key) }
-func (p CompareAndSwap[K, V]) payload()             {}
+func (p compareAndSwap[K, V]) PartitionKey() string { return fmt.Sprintf("%v", p.Key) }
+func (p compareAndSwap[K, V]) payload()             {}
 
 // Payload is a sealed interface for state operations.
 // Only predefined payload types (Set, Get, Delete) can implement this interface.
