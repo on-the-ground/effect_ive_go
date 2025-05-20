@@ -71,6 +71,11 @@ func LoadEffect[K comparable, V ComparableEquatable](ctx context.Context, key K)
 	})
 }
 
+func LoadEffects[V ComparableEquatable](ctx context.Context, prefix string) (val map[string]V, err error) {
+	// todo https://github.com/on-the-ground/effect_ive_go/issues/46
+	panic("not implemented")
+}
+
 func InsertIfAbsentEffect[K comparable, V ComparableEquatable](
 	ctx context.Context,
 	key K,
@@ -183,7 +188,7 @@ func delegateStateEffect(upperCtx context.Context, payload Payload) (res any, er
 // It supports safe concurrent access and fallback to upstream handler if key is missing.
 type stateHandler[K comparable, V ComparableEquatable] struct {
 	stateStore StateStore
-	timers     map[K]*time.Timer
+	timers     map[K]*time.Timer // todo https://github.com/on-the-ground/effect_ive_go/issues/45
 	sink       chan TimeBoundedPayload
 	delegation bool
 }
