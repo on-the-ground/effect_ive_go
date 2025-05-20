@@ -37,7 +37,7 @@ func WithEffectHandler[T any](parentCtx context.Context, bufferSize int) (contex
 	}
 }
 
-func EffectMap[T any, R any](
+func MapEffect[T any, R any](
 	ctx context.Context,
 	source <-chan T,
 	sink chan<- R,
@@ -55,7 +55,7 @@ func EffectMap[T any, R any](
 	})
 }
 
-func EffectPipe[T any](
+func PipeEffect[T any](
 	ctx context.Context,
 	source <-chan T,
 	sink chan<- T,
@@ -72,7 +72,7 @@ func EffectPipe[T any](
 	})
 }
 
-func EffectEagerFilter[T any](
+func EagerFilterEffect[T any](
 	ctx context.Context,
 	source <-chan T,
 	sink chan<- T,
@@ -92,7 +92,7 @@ func EffectEagerFilter[T any](
 	})
 }
 
-func EffectLazyFilter[T any](
+func LazyFilterEffect[T any](
 	ctx context.Context,
 	source <-chan T,
 	sink chan<- T,
@@ -125,7 +125,7 @@ func EffectLazyFilter[T any](
 	})
 }
 
-func EffectMerge[T any](
+func MergeEffect[T any](
 	ctx context.Context,
 	sources []<-chan T,
 	sink chan<- T,
@@ -150,7 +150,7 @@ func EffectMerge[T any](
 	})
 }
 
-func EffectSubscribe[T any](
+func SubscribeEffect[T any](
 	ctx context.Context,
 	source SourceAsKey[T],
 	sink chan<- T,
@@ -162,7 +162,7 @@ func EffectSubscribe[T any](
 	)
 }
 
-func EffectUnsubscribe[T any](
+func UnsubscribeEffect[T any](
 	ctx context.Context,
 	source SourceAsKey[T],
 	sink chan<- T,
@@ -174,7 +174,7 @@ func EffectUnsubscribe[T any](
 	)
 }
 
-func EffectOrderBy[T any](
+func OrderByEffect[T any](
 	ctx context.Context,
 	windowSize int,
 	source SourceAsKey[T],

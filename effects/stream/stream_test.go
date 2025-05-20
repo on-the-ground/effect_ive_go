@@ -28,7 +28,7 @@ func TestStreamEffect_MapFilterMerge(t *testing.T) {
 	filterSink := make(chan string)
 
 	// Step 1: Map (int -> string)
-	stream.EffectMap(
+	stream.MapEffect(
 		ctx,
 		source,
 		mapSink,
@@ -38,7 +38,7 @@ func TestStreamEffect_MapFilterMerge(t *testing.T) {
 	)
 
 	// Step 2: Filter (only even values)
-	stream.EffectEagerFilter(
+	stream.EagerFilterEffect(
 		ctx,
 		mapSink,
 		filterSink,
@@ -88,7 +88,7 @@ func TestStreamEffect_ShutdownPropagation(t *testing.T) {
 	done := make(chan string, 3) // map/filter/consumer
 
 	// MapEffect
-	stream.EffectMap(
+	stream.MapEffect(
 		ctx,
 		source,
 		mapSink,
@@ -98,7 +98,7 @@ func TestStreamEffect_ShutdownPropagation(t *testing.T) {
 	)
 
 	// FilterEffect
-	stream.EffectEagerFilter(
+	stream.EagerFilterEffect(
 		ctx,
 		mapSink,
 		filterSink,
@@ -165,7 +165,7 @@ func TestSubscribeStreamPayload_OneSinkReceivesEvent(t *testing.T) {
 	dropped := make(chan int, capacityOfDropped)
 
 	// 1. Subscribe sink
-	stream.EffectSubscribe(
+	stream.SubscribeEffect(
 		ctx,
 		source,
 		sink,
@@ -215,14 +215,14 @@ func TestSubscribeStreamPayload_MultipleSinksSequentiallyReceiveEvent(t *testing
 	dropped := make(chan int, capacityOfDropped)
 
 	// 1. Subscribe sinks
-	stream.EffectSubscribe(
+	stream.SubscribeEffect(
 		ctx,
 		source,
 		sink1,
 		dropped,
 	)
 
-	stream.EffectSubscribe(
+	stream.SubscribeEffect(
 		ctx,
 		source,
 		sink2,
@@ -293,7 +293,7 @@ func TestStream_UnsubscribeSinkDoesNotPanic(t *testing.T) {
 	dropped := make(chan int, 1)
 
 	// Subscribe
-	stream.EffectSubscribe(
+	stream.SubscribeEffect(
 		ctx,
 		source,
 		sink,
@@ -304,7 +304,7 @@ func TestStream_UnsubscribeSinkDoesNotPanic(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Unsubscribe and close the sink
-	stream.EffectUnsubscribe(
+	stream.UnsubscribeEffect(
 		ctx,
 		source,
 		sink,
@@ -349,7 +349,7 @@ func TestStreamEffect_OrderByStreamPayload_SortsCorrectly(t *testing.T) {
 		source <- 3
 	}()
 
-	stream.EffectOrderBy(
+	stream.OrderByEffect(
 		ctx,
 		5,
 		source,
@@ -385,7 +385,7 @@ func TestStreamEffect_MergeStreamPayload_DoubleClose(t *testing.T) {
 	sink := make(chan int)
 
 	// Merge both sources into one sink by MergeStreamPayload
-	stream.EffectMerge(ctx,
+	stream.MergeEffect(ctx,
 		[]<-chan int{source1, source2},
 		sink,
 	)
@@ -426,7 +426,7 @@ func TestStreamEffect_LazyFilter_TTLDrop(t *testing.T) {
 	ttl := 100 * time.Millisecond
 
 	// LazyFilter: 메시지가 아직 expire되지 않았을 때만 통과
-	stream.EffectLazyFilter(ctx,
+	stream.LazyFilterEffect(ctx,
 		source,
 		sink,
 
