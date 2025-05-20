@@ -45,14 +45,15 @@ func MustGetTypedValue[T any](getFn func() (any, error)) T {
 var ErrMaxAttempts = fmt.Errorf("max attempts reached")
 
 func Retry(maxAttemps int, fn func() error) error {
-	numAttemps := 0
+	numAttempts := 0
 	for {
 		err := fn()
 		if err == nil {
 			return nil
 		}
-		if numAttemps >= maxAttemps {
-			return fmt.Errorf("%w: %d, %w", ErrMaxAttempts, numAttemps, err)
+		numAttempts++
+		if numAttempts >= maxAttemps {
+			return fmt.Errorf("%w: %d, %w", ErrMaxAttempts, numAttempts, err)
 		}
 	}
 }
