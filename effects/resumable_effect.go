@@ -2,12 +2,12 @@ package effects
 
 import (
 	"context"
+	"log"
 
 	"github.com/on-the-ground/effect_ive_go/effects/internal/handlers"
 	"github.com/on-the-ground/effect_ive_go/effects/internal/helper"
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 	sharedHelper "github.com/on-the-ground/effect_ive_go/shared/helper"
-	"go.uber.org/zap"
 )
 
 // WithResumableEffectHandler registers a resumable effect handler for a given effect enum.
@@ -21,15 +21,14 @@ func WithResumableEffectHandler[P any, R any](
 	handleFn func(context.Context, P) (R, error),
 	teardown ...func(),
 ) (context.Context, func() context.Context) {
-	logger, _ := zap.NewProduction()
 	td := normalizeTeardown(teardown)
 	handler := handlers.NewResumableHandler(ctx, bufferSize, handleFn, td)
 	ctxWith := context.WithValue(ctx, enum, handler)
-	logger.Sugar().Debugf("created resumable effect handler: effectId: %v, enum: %v", handler.EffectId, enum)
+	log.Printf("created resumable effect handler: effectId: %v, enum: %v", handler.EffectId, enum)
 
 	return ctxWith, func() context.Context {
 		handler.Close()
-		logger.Sugar().Debugf("closed resumable effect handler: effectId: %v, enum:%v", handler.EffectId, enum)
+		log.Printf("closed resumable effect handler: effectId: %v, enum:%v", handler.EffectId, enum)
 		return ctx
 	}
 }
@@ -50,15 +49,14 @@ func WithResumablePartitionableEffectHandler[P effectmodel.Partitionable, R any]
 	handleFn func(context.Context, P) (R, error),
 	teardown ...func(),
 ) (context.Context, func() context.Context) {
-	logger, _ := zap.NewProduction()
 	td := normalizeTeardown(teardown)
 	handler := handlers.NewPartitionableResumableHandler(ctx, config, handleFn, td)
 	ctxWith := context.WithValue(ctx, enum, handler)
-	logger.Sugar().Debugf("created resumable effect handler: effectId: %v, enum: %v", handler.EffectId, enum)
+	log.Printf("created resumable effect handler: effectId: %v, enum: %v", handler.EffectId, enum)
 
 	return ctxWith, func() context.Context {
 		handler.Close()
-		logger.Sugar().Debugf("closed resumable effect handler: effectId: %v, enum:%v", handler.EffectId, enum)
+		log.Printf("closed resumable effect handler: effectId: %v, enum:%v", handler.EffectId, enum)
 		return ctx
 	}
 }

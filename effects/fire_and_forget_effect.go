@@ -2,11 +2,11 @@ package effects
 
 import (
 	"context"
+	"log"
 
 	"github.com/on-the-ground/effect_ive_go/effects/internal/handlers"
 	"github.com/on-the-ground/effect_ive_go/effects/internal/helper"
 	sharedHelper "github.com/on-the-ground/effect_ive_go/shared/helper"
-	"go.uber.org/zap"
 
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 )
@@ -22,15 +22,14 @@ func WithFireAndForgetEffectHandler[P any](
 	handleFn func(context.Context, P),
 	teardown ...func(),
 ) (context.Context, func() context.Context) {
-	logger, _ := zap.NewProduction()
 	td := normalizeTeardown(teardown)
 	handler := handlers.NewFireAndForgetHandler(ctx, bufferSize, handleFn, td)
 	ctxWith := context.WithValue(ctx, enum, handler)
-	logger.Sugar().Debugf("created fire/forget effect handler: effectId: %v, enum: %v", handler.EffectId, enum)
+	log.Printf("created fire/forget effect handler: effectId: %v, enum: %v", handler.EffectId, enum)
 
 	return ctxWith, func() context.Context {
 		handler.Close()
-		logger.Sugar().Debugf("closed fire/forget effect handler: effectId: %v, enum: %v", handler.EffectId, enum)
+		log.Printf("closed fire/forget effect handler: effectId: %v, enum: %v", handler.EffectId, enum)
 		return ctx
 	}
 }
@@ -46,15 +45,14 @@ func WithFireAndForgetPartitionableEffectHandler[P effectmodel.Partitionable](
 	handleFn func(context.Context, P),
 	teardown ...func(),
 ) (context.Context, func() context.Context) {
-	logger, _ := zap.NewProduction()
 	td := normalizeTeardown(teardown)
 	handler := handlers.NewPartitionableFireAndForgetHandler(ctx, config, handleFn, td)
 	ctxWith := context.WithValue(ctx, enum, handler)
-	logger.Sugar().Debugf("created fire/forget effect handler: effectId: %v, enum: %v", handler.EffectId, enum)
+	log.Printf("created fire/forget effect handler: effectId: %v, enum: %v", handler.EffectId, enum)
 
 	return ctxWith, func() context.Context {
 		handler.Close()
-		logger.Sugar().Debugf("closed fire/forget effect handler: effectId: %v, enum: %v", handler.EffectId, enum)
+		log.Printf("closed fire/forget effect handler: effectId: %v, enum: %v", handler.EffectId, enum)
 		return ctx
 	}
 }
