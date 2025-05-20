@@ -166,11 +166,10 @@ func UnsubscribeEffect[T any](
 	ctx context.Context,
 	source SourceAsKey[T],
 	sink chan<- T,
-	dropped chan<- T,
 ) {
 	effects.PerformResumableEffect[payload[T], struct{}](ctx,
 		effectmodel.EffectStream,
-		newUnsubscribePayload(source, sink, dropped),
+		newUnsubscribePayload(source, sink),
 	)
 }
 

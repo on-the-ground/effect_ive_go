@@ -308,7 +308,6 @@ func TestStream_UnsubscribeSinkDoesNotPanic(t *testing.T) {
 		ctx,
 		source,
 		sink,
-		dropped,
 	)
 	close(sink)
 
