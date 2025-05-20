@@ -26,7 +26,7 @@ func WithEffectHandler[T any](parentCtx context.Context, bufferSize int) (contex
 		ctx,
 		bufferSize,
 		effectmodel.EffectStream,
-		reg.handleSubscriptionEffect,
+		reg.handleEffect,
 	)
 
 	return ctx, func() context.Context {
@@ -48,6 +48,23 @@ func EffectMap[T any, R any](
 		for v := range source {
 			select {
 			case sink <- mapFn(v):
+			case <-ctx.Done():
+				return
+			}
+		}
+	})
+}
+
+func EffectPipe[T any](
+	ctx context.Context,
+	source <-chan T,
+	sink chan<- T,
+) {
+	concurrency.Effect(ctx, func(ctx context.Context) {
+		defer close(sink)
+		for v := range source {
+			select {
+			case sink <- v:
 			case <-ctx.Done():
 				return
 			}
@@ -139,10 +156,22 @@ func EffectSubscribe[T any](
 	sink chan<- T,
 	dropped chan<- T,
 ) {
-	effects.PerformResumableEffect[subscribePayload[T], struct{}](ctx, effectmodel.EffectStream, subscribePayload[T]{
-		Source: source,
-		Target: newSinkDropPair(sink, dropped),
-	})
+	effects.PerformResumableEffect[payload[T], struct{}](ctx,
+		effectmodel.EffectStream,
+		newSubscribePayload(source, sink, dropped),
+	)
+}
+
+func EffectUnsubscribe[T any](
+	ctx context.Context,
+	source SourceAsKey[T],
+	sink chan<- T,
+	dropped chan<- T,
+) {
+	effects.PerformResumableEffect[payload[T], struct{}](ctx,
+		effectmodel.EffectStream,
+		newUnsubscribePayload(source, sink, dropped),
+	)
 }
 
 func EffectOrderBy[T any](
@@ -187,13 +216,86 @@ type channelRegistry[T any] struct {
 	*sync.Map
 }
 
-func (reg channelRegistry[T]) handleSubscriptionEffect(ctx context.Context, msg subscribePayload[T]) (struct{}, error) {
+func (reg channelRegistry[T]) handleEffect(ctx context.Context, msg payload[T]) (struct{}, error) {
+	switch msg := msg.(type) {
+	case subscribePayload[T]:
+		return reg.subscribe(ctx, msg)
+	case unsubscribePayload[T]:
+		return reg.unsubscribe(ctx, msg)
+	default:
+		log.Effect(ctx, log.LogError, "unknown message type", map[string]interface{}{
+			"msg": msg,
+		})
+		return struct{}{}, nil
+	}
+}
+
+func (reg channelRegistry[T]) unsubscribe(ctx context.Context, msg unsubscribePayload[T]) (struct{}, error) {
+	oldSinks, ok := helper.GetTypedValueOf2[*RegisteredList[T]](func() (any, bool) {
+		return reg.Load(msg.Source.String())
+	})
+	if !ok {
+		log.Effect(ctx, log.LogError, "fail to cast sinks", map[string]interface{}{
+			"key": msg.Source,
+		})
+		return struct{}{}, nil
+	}
+
+	getIdxOf := func(oldSinks *RegisteredList[T], targetSink chan<- T) (int, bool) {
+		for i, regPair := range oldSinks.Registered {
+			if regPair.Sink == targetSink {
+				return i, true
+			}
+		}
+		return -1, false
+	}
+	idx, ok := getIdxOf(oldSinks, msg.Sink)
+	if !ok {
+		log.Effect(ctx, log.LogInfo, "fail to find sink in sinks", map[string]interface{}{
+			"key": msg.Source,
+		})
+		return struct{}{}, nil
+	}
+	newSinks := append(oldSinks.Registered[:idx], oldSinks.Registered[idx+1:]...)
+
+	tryUnregisterSink := func() error {
+		if swapped := reg.CompareAndSwap(
+			msg.Source.String(),
+			oldSinks,
+			newSinks,
+		); swapped {
+			// If the swap was successful, we can break out of the loop
+			return nil
+		}
+		// race condition, the sink was already updated
+		// We need to retry the operation
+		err := fmt.Errorf("fail to update sinks")
+		log.Effect(ctx, log.LogDebug, "tryUnregistreSink: ", map[string]interface{}{
+			"error": err,
+			"key":   msg.Source,
+		})
+		return err
+	}
+
+	maxAttemps := 5
+	err := helper.Retry(maxAttemps, tryUnregisterSink)
+	if err != nil {
+		log.Effect(ctx, log.LogError, "fail to append new sink after max attempts", map[string]interface{}{
+			"error": err,
+			"key":   msg.Source,
+		})
+	}
+	return struct{}{}, err
+}
+
+func (reg channelRegistry[T]) subscribe(ctx context.Context, msg subscribePayload[T]) (struct{}, error) {
 	var firstSink bool
+	newPair := newSinkDropPair(msg.Sink, msg.Dropped)
 
 	raw, ok := reg.Load(msg.Source.String())
 	firstSink = !ok
 	if firstSink {
-		reg.Store(msg.Source.String(), &RegisteredList[T]{Registered: []*sinkDropPair[T]{msg.Target}})
+		reg.Store(msg.Source.String(), &RegisteredList[T]{Registered: []*sinkDropPair[T]{newPair}})
 		concurrency.Effect(ctx, func(ctx context.Context) {
 			logger, _ := zap.NewProduction()
 			ctx, endOfLogHandler := log.WithZapEffectHandler(ctx, 10, logger)
@@ -224,7 +326,7 @@ func (reg channelRegistry[T]) handleSubscriptionEffect(ctx context.Context, msg 
 		if swapped := reg.CompareAndSwap(
 			msg.Source.String(),
 			oldSinks,
-			&RegisteredList[T]{Registered: append(oldSinks.Registered, msg.Target)},
+			&RegisteredList[T]{Registered: append(oldSinks.Registered, newPair)},
 		); swapped {
 			// If the swap was successful, we can break out of the loop
 			return nil
@@ -264,6 +366,10 @@ func (reg *channelRegistry[T]) arbit(ctx context.Context, source SourceAsKey[T])
 			log.Effect(ctx, log.LogError, "fail to cast sinks, dropped an message", map[string]interface{}{
 				"value": v,
 			})
+			continue
+		}
+
+		if len(sinks.Registered) == 0 {
 			continue
 		}
 
