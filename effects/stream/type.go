@@ -4,14 +4,49 @@ import (
 	"fmt"
 )
 
+type payload[T any] interface {
+	sealedStreamPayload()
+}
+
+type unsubscribePayload[T any] struct {
+	Source  SourceAsKey[T]
+	Sink    chan<- T
+	Dropped chan<- T
+}
+
+func (p unsubscribePayload[T]) PartitionKey() string {
+	return p.Source.String()
+}
+
+func (p unsubscribePayload[T]) sealedStreamPayload() {}
+
+func newUnsubscribePayload[T any](source SourceAsKey[T], sink, dropped chan<- T) payload[T] {
+	return unsubscribePayload[T]{
+		Source:  source,
+		Sink:    sink,
+		Dropped: dropped,
+	}
+}
+
+func newSubscribePayload[T any](source SourceAsKey[T], sink, dropped chan<- T) payload[T] {
+	return subscribePayload[T]{
+		Source:  source,
+		Sink:    sink,
+		Dropped: dropped,
+	}
+}
+
 type subscribePayload[T any] struct {
-	Source SourceAsKey[T]
-	Target *sinkDropPair[T]
+	Source  SourceAsKey[T]
+	Sink    chan<- T
+	Dropped chan<- T
 }
 
 func (p subscribePayload[T]) PartitionKey() string {
 	return p.Source.String()
 }
+
+func (p subscribePayload[T]) sealedStreamPayload() {}
 
 type SourceAsKey[T any] <-chan T
 

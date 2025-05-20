@@ -280,6 +280,55 @@ func TestSubscribeStreamPayload_MultipleSinksSequentiallyReceiveEvent(t *testing
 	assert.False(t, ok)
 }
 
+func TestStream_UnsubscribeSinkDoesNotPanic(t *testing.T) {
+	ctx := context.Background()
+	ctx, logEnd := log.WithTestEffectHandler(ctx)
+	defer logEnd()
+
+	ctx, endOfStreamHandler := stream.WithEffectHandler[int](ctx, 32)
+	defer endOfStreamHandler()
+
+	source := make(chan int, 1)
+	sink := make(chan int, 1)
+	dropped := make(chan int, 1)
+
+	// Subscribe
+	stream.EffectSubscribe(
+		ctx,
+		source,
+		sink,
+		dropped,
+	)
+
+	// Give time for registration
+	time.Sleep(200 * time.Millisecond)
+
+	// Unsubscribe and close the sink
+	stream.EffectUnsubscribe(
+		ctx,
+		source,
+		sink,
+		dropped,
+	)
+	close(sink)
+
+	// Send value into source after unsubscribe
+	// Make sure arbit does not panic due to closed sink
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("arbit panicked after unsubscribe: %v", r)
+		}
+	}()
+
+	source <- 77
+
+	// Wait briefly to allow arbit to process
+	time.Sleep(200 * time.Millisecond)
+
+	// Clean up
+	close(source)
+}
+
 func TestStreamEffect_OrderByStreamPayload_SortsCorrectly(t *testing.T) {
 	ctx := context.Background()
 	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
