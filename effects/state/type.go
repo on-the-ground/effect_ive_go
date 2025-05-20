@@ -3,7 +3,28 @@ package state
 import (
 	"fmt"
 	"reflect"
+	"time"
 )
+
+type setTTL[K comparable] struct {
+	Key K
+	TTL time.Duration
+}
+
+func (s setTTL[K]) PartitionKey() string {
+	return fmt.Sprintf("%v", s.Key)
+}
+func (s setTTL[K]) payload() {}
+
+type resetTTL[K comparable] struct {
+	Key K
+	TTL time.Duration
+}
+
+func (s resetTTL[K]) PartitionKey() string {
+	return fmt.Sprintf("%v", s.Key)
+}
+func (s resetTTL[K]) payload() {}
 
 var _ Payload = Source{}
 
