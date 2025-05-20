@@ -58,7 +58,7 @@ func effectSource(ctx context.Context) (chan TimeBoundedPayload, error) {
 	})
 }
 
-func EffectLoad[K comparable, V ComparableEquatable](
+func LoadEffect[K comparable, V ComparableEquatable](
 	ctx context.Context,
 	key K,
 ) (val V, err error) {
@@ -67,7 +67,7 @@ func EffectLoad[K comparable, V ComparableEquatable](
 	})
 }
 
-func EffectInsertIfAbsent[K comparable, V ComparableEquatable](
+func InsertIfAbsentEffect[K comparable, V ComparableEquatable](
 	ctx context.Context,
 	key K,
 	new V,
@@ -80,7 +80,7 @@ func EffectInsertIfAbsent[K comparable, V ComparableEquatable](
 	})
 }
 
-func EffectCompareAndDelete[K comparable, V ComparableEquatable](
+func CompareAndDeleteEffect[K comparable, V ComparableEquatable](
 	ctx context.Context,
 	key K,
 	old V,
@@ -93,7 +93,7 @@ func EffectCompareAndDelete[K comparable, V ComparableEquatable](
 	})
 }
 
-func EffectCompareAndSwap[K comparable, V ComparableEquatable](
+func CompareAndSwapEffect[K comparable, V ComparableEquatable](
 	ctx context.Context,
 	key K,
 	old, new V,
@@ -402,7 +402,7 @@ func tryToUpdate[K comparable, V ComparableEquatable](ctx context.Context, paylo
 		"new": payload.New,
 	})
 
-	if swapped, err := EffectCompareAndSwap(ctx, payload.Key, old, payload.New); err != nil {
+	if swapped, err := CompareAndSwapEffect(ctx, payload.Key, old, payload.New); err != nil {
 		log.Effect(ctx, log.LogError, "fail to update old value of parent handler", map[string]interface{}{
 			"key": payload.Key,
 			"err": err,

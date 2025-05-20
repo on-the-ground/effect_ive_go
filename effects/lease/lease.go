@@ -63,7 +63,7 @@ func EffectResourceRegistration(
 	)
 
 	return helper.GetTypedValueOf[bool](func() (any, error) {
-		return state.EffectInsertIfAbsent(ctx,
+		return state.InsertIfAbsentEffect(ctx,
 			key,
 			peekable,
 		)
@@ -78,7 +78,7 @@ func EffectResourceRegistrationNoExpiry(
 	pair := newBypassPair[time.Time](numOwners)
 
 	return helper.GetTypedValueOf[bool](func() (any, error) {
-		return state.EffectInsertIfAbsent(ctx,
+		return state.InsertIfAbsentEffect(ctx,
 			key,
 			pair,
 		)
@@ -89,7 +89,7 @@ func EffectResourceRegistrationNoExpiry(
 // Deregistration fails if the resource is currently acquired (non-empty channel).
 func EffectResourceDeregistration(ctx context.Context, key string) (res bool, err error) {
 	var peekable *sourceSinkPair[time.Time]
-	peekable, err = state.EffectLoad[string, *sourceSinkPair[time.Time]](ctx, key)
+	peekable, err = state.LoadEffect[string, *sourceSinkPair[time.Time]](ctx, key)
 	if err != nil {
 		res, err = false, fmt.Errorf("%w: key %s", ErrUnregisteredResource, key)
 		return
@@ -105,7 +105,7 @@ func EffectResourceDeregistration(ctx context.Context, key string) (res bool, er
 			close(peekable.source)
 		}
 	}()
-	res, err = state.EffectCompareAndDelete(ctx, key, peekable)
+	res, err = state.CompareAndDeleteEffect(ctx, key, peekable)
 	return
 
 }
@@ -114,7 +114,7 @@ func EffectResourceDeregistration(ctx context.Context, key string) (res bool, er
 // If the resource is registered and capacity is available, the lease is granted.
 // If capacity is full, this call blocks unless context expires.
 func EffectAcquisition(ctx context.Context, key string) (bool, error) {
-	if peekable, err := state.EffectLoad[string, *sourceSinkPair[time.Time]](ctx, key); err != nil {
+	if peekable, err := state.LoadEffect[string, *sourceSinkPair[time.Time]](ctx, key); err != nil {
 		return false, fmt.Errorf("%w: key %s", ErrUnregisteredResource, key)
 	} else {
 		select {
@@ -129,7 +129,7 @@ func EffectAcquisition(ctx context.Context, key string) (bool, error) {
 // EffectRelease releases a previously acquired lease for the given key.
 // If the lease was not acquired or key is missing, it returns an error.
 func EffectRelease(ctx context.Context, key string) (bool, error) {
-	if peekable, err := state.EffectLoad[string, *sourceSinkPair[time.Time]](ctx, key); err != nil {
+	if peekable, err := state.LoadEffect[string, *sourceSinkPair[time.Time]](ctx, key); err != nil {
 		return false, fmt.Errorf("%w: key %s", ErrUnregisteredResource, key)
 	} else {
 		select {

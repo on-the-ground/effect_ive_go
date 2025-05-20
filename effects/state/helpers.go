@@ -36,10 +36,10 @@ func NewInMemoryStore[K comparable]() StateStore {
 	return NewCasStore(inMemStore[K]{Map: &sync.Map{}})
 }
 
-// EffectSubscribeSource subscribes to the effect source and sends the received payloads to the provided sink and dropped channels.
+// EventSourcingEffect subscribes to the effect source and sends the received payloads to the provided sink and dropped channels.
 // It logs an error if the effect source is not found.
 // WARNING: Stream effect handler must be created before calling this function.
-func EffectSubscribeSource(
+func EventSourcingEffect(
 	ctx context.Context,
 	sink chan<- TimeBoundedPayload,
 	dropped chan<- TimeBoundedPayload,
