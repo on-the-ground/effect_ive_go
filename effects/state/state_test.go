@@ -34,7 +34,7 @@ func TestStateEffect_BasicLookup(t *testing.T) {
 		)
 		defer endOfStateHandler()
 
-		v, err := state.EffectLoad[string, int](ctx, "foo")
+		v, err := state.LoadEffect[string, int](ctx, "foo")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -68,7 +68,7 @@ func TestStateEffect_KeyNotFound(t *testing.T) {
 		)
 		defer endOfStateHandler()
 
-		_, err := state.EffectLoad[string, int](ctx, "bar")
+		_, err := state.LoadEffect[string, int](ctx, "bar")
 		if err == nil || !strings.Contains(err.Error(), "key not found") {
 			t.Fatalf("expected key-not-found error, got: %v", err)
 		}
@@ -110,7 +110,7 @@ func TestStateEffect_DelegatesToUpperScope(t *testing.T) {
 		)
 		defer lowerClose()
 
-		v, err := state.EffectLoad[string, any](lowerCtx, "upper")
+		v, err := state.LoadEffect[string, any](lowerCtx, "upper")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -166,7 +166,7 @@ func TestStateEffect_ConcurrentPartitionedAccess(t *testing.T) {
 				keyIdx := i % len(states) // deterministic but shuffled
 				key := fmt.Sprintf("key%d", keyIdx)
 
-				v, err := state.EffectLoad[string, string](ctx, key)
+				v, err := state.LoadEffect[string, string](ctx, key)
 				mu.Lock()
 				defer mu.Unlock()
 
@@ -232,24 +232,24 @@ func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 				key := fmt.Sprintf("key%d", i%10)
 
 				// Load current value
-				v, _ := state.EffectLoad[string, any](ctx, key)
+				v, _ := state.LoadEffect[string, any](ctx, key)
 
 				switch i % 4 {
 				case 0:
 					// Store unconditionally
-					_, err := state.EffectInsertIfAbsent[string, any](ctx, key, i)
+					_, err := state.InsertIfAbsentEffect[string, any](ctx, key, i)
 					assert.NoError(t, err)
 
 				case 1:
 					// Compare and delete
-					deleted, err := state.EffectCompareAndDelete(ctx, key, v)
+					deleted, err := state.CompareAndDeleteEffect(ctx, key, v)
 					assert.NoError(t, err)
 					// deleted is bool (true if successful)
 					_ = deleted
 
 				case 2:
 					// Compare and swap
-					swapped, err := state.EffectCompareAndSwap[string, any](ctx,
+					swapped, err := state.CompareAndSwapEffect[string, any](ctx,
 						key,
 						v,
 						fmt.Sprintf("val-%d", i),
@@ -260,7 +260,7 @@ func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 
 				case 3:
 					// Just load again to add read load
-					_, _ = state.EffectLoad[string, any](ctx, key)
+					_, _ = state.LoadEffect[string, any](ctx, key)
 				}
 			}(i)
 		}
@@ -296,7 +296,7 @@ func TestStateEffect_ContextTimeout(t *testing.T) {
 
 		time.Sleep(1 * time.Millisecond) // allow timeout to occur
 
-		res, err := state.EffectLoad[string, any](timeoutCtx, "any")
+		res, err := state.LoadEffect[string, any](timeoutCtx, "any")
 		log.Effect(ctx, log.LogInfo, "final result", map[string]interface{}{
 			"res": res,
 			"err": err,
@@ -326,8 +326,8 @@ func TestStateEffect_SetAndGet(t *testing.T) {
 		)
 		defer endOfStateHandler()
 
-		old, _ := state.EffectLoad[string, int](ctx, "foo")
-		inserted, err := state.EffectInsertIfAbsent(ctx, "foo", 777)
+		old, _ := state.LoadEffect[string, int](ctx, "foo")
+		inserted, err := state.InsertIfAbsentEffect(ctx, "foo", 777)
 		require.NoError(t, err)
 		require.True(t, inserted)
 		defer log.Effect(ctx, log.LogInfo, "swapped", map[string]any{
@@ -335,7 +335,7 @@ func TestStateEffect_SetAndGet(t *testing.T) {
 			"new": 777,
 		})
 
-		_, err = state.EffectLoad[string, int](ctx, "foo")
+		_, err = state.LoadEffect[string, int](ctx, "foo")
 		assert.NoError(t, err)
 	}
 
@@ -370,12 +370,12 @@ func TestStateEffect_SourcePayloadReturnsSink(t *testing.T) {
 		src := make(chan state.TimeBoundedPayload, 10)
 		dropped := make(chan state.TimeBoundedPayload)
 
-		state.EffectSubscribeSource(ctx, src, dropped)
+		state.EventSourcingEffect(ctx, src, dropped)
 
 		// 2. Send a InsertPaylod
 		key := "test-key"
 		newVal := "new-value"
-		inserted, err := state.EffectInsertIfAbsent(ctx, key, newVal)
+		inserted, err := state.InsertIfAbsentEffect(ctx, key, newVal)
 		require.NoError(t, err)
 		require.True(t, inserted)
 
@@ -392,7 +392,7 @@ func TestStateEffect_SourcePayloadReturnsSink(t *testing.T) {
 
 		// 4. Send a CompareAndDeleteStatePayload
 		oldVal := "new-value"
-		_, err = state.EffectCompareAndDelete(ctx, key, oldVal)
+		_, err = state.CompareAndDeleteEffect(ctx, key, oldVal)
 		require.NoError(t, err)
 
 		// 5. Check the sink channel for the CompareAndDeleteStatePayload
@@ -452,21 +452,21 @@ func TestStore_Delegation(t *testing.T) {
 		defer endOfTier0()
 
 		// Store should succeed in tier 0
-		_, err := state.EffectInsertIfAbsent(ctx0, "x", 2)
+		_, err := state.InsertIfAbsentEffect(ctx0, "x", 2)
 		assert.NoError(t, err, "Store delegation failed")
 
 		// Confirm that new value is set
-		val, err := state.EffectLoad[string, int](ctx0, "x")
+		val, err := state.LoadEffect[string, int](ctx0, "x")
 		assert.NoError(t, err, "Load failed")
 		assert.Equal(t, val, 2, "Expected x=2")
 
 		// Confirm that new value is set
-		val, err = state.EffectLoad[string, int](ctx1, "x")
+		val, err = state.LoadEffect[string, int](ctx1, "x")
 		assert.NoError(t, err, "Load failed")
 		assert.Equal(t, val, 2, "Expected x=2")
 
 		// Confirm that prev value is set
-		_, err = state.EffectLoad[string, int](ctx2, "x")
+		_, err = state.LoadEffect[string, int](ctx2, "x")
 		assert.ErrorIs(t, err, state.ErrNoSuchKey, "should be no such key")
 	}
 
@@ -519,22 +519,22 @@ func TestCompareAndSwap_Delegation(t *testing.T) {
 		defer endOfTier0()
 
 		// CAS should succeed in tier 0
-		ok, err := state.EffectCompareAndSwap(ctx0, "x", 1, 2)
+		ok, err := state.CompareAndSwapEffect(ctx0, "x", 1, 2)
 		assert.NoError(t, err, "CAS delegation failed")
 		assert.True(t, ok, "CAS delegation returned false, expected true")
 
 		// Confirm that new value is set
-		val, err := state.EffectLoad[string, int](ctx0, "x")
+		val, err := state.LoadEffect[string, int](ctx0, "x")
 		assert.NoError(t, err, "Load failed")
 		assert.Equal(t, val, 2, "Expected x=2")
 
 		// Confirm that new value is set
-		val, err = state.EffectLoad[string, int](ctx1, "x")
+		val, err = state.LoadEffect[string, int](ctx1, "x")
 		assert.NoError(t, err, "Load failed")
 		assert.Equal(t, val, 2, "Expected x=2")
 
 		// Confirm that prev value is set
-		val, err = state.EffectLoad[string, int](ctx2, "x")
+		val, err = state.LoadEffect[string, int](ctx2, "x")
 		assert.NoError(t, err, "Load failed")
 		assert.Equal(t, val, 1, "Expected x=1")
 	}
@@ -591,12 +591,12 @@ func TestCompareAndDelete_Delegation(t *testing.T) {
 		defer endOfTier0()
 
 		// CAD should succeed in tier 0
-		ok, err := state.EffectCompareAndDelete(ctx0, "y", 99)
+		ok, err := state.CompareAndDeleteEffect(ctx0, "y", 99)
 		assert.NoError(t, err, "CAD delegation failed")
 		assert.True(t, ok, "CAD delegation returned false, expected true")
 
 		// Confirm that prev value is set
-		val, err := state.EffectLoad[string, int](ctx2, "y")
+		val, err := state.LoadEffect[string, int](ctx2, "y")
 		assert.NoError(t, err, "Load failed")
 		assert.Equal(t, val, 98, "Expected y=99")
 	}
@@ -625,12 +625,12 @@ func TestInsertIfAbsent_DelegationConflict_CAS_Success(t *testing.T) {
 	defer endCache()
 
 	// Insert with different value → should trigger CAS
-	ok, err := state.EffectInsertIfAbsent(cacheCtx, "conflict", "new")
+	ok, err := state.InsertIfAbsentEffect(cacheCtx, "conflict", "new")
 	assert.True(t, ok)
 	assert.NoError(t, err)
 
 	// Upper value should be updated to "new"
-	v, err := state.EffectLoad[string, string](upperCtx, "conflict")
+	v, err := state.LoadEffect[string, string](upperCtx, "conflict")
 	assert.NoError(t, err)
 	assert.Equal(t, "new", v)
 }
@@ -658,13 +658,13 @@ func TestInsertIfAbsent_DelegationConflict_CAS_Success_2(t *testing.T) {
 
 	go func() {
 		<-ready
-		_, _ = state.EffectCompareAndSwap(upperCtx, "x", "v1", "external")
+		_, _ = state.CompareAndSwapEffect(upperCtx, "x", "v1", "external")
 		close(done)
 	}()
 
 	// Trigger InsertIfAbsent, with delayed CAS
 	close(ready)
-	ok, err := state.EffectInsertIfAbsent(cacheCtx, "x", "v2")
+	ok, err := state.InsertIfAbsentEffect(cacheCtx, "x", "v2")
 	assert.True(t, ok)
 	assert.NoError(t, err)
 
@@ -672,7 +672,7 @@ func TestInsertIfAbsent_DelegationConflict_CAS_Success_2(t *testing.T) {
 	<-done
 
 	// Final value should be "external", not "v2"
-	v, err := state.EffectLoad[string, string](upperCtx, "x")
+	v, err := state.LoadEffect[string, string](upperCtx, "x")
 	assert.NoError(t, err)
 	assert.Equal(t, "v2", v)
 }
@@ -693,11 +693,11 @@ func TestInsertIfAbsent_DelegationConflict_EqualValues_Skip(t *testing.T) {
 	cacheCtx, endCache := state.WithEffectHandler[string, string](upperCtx, 1, 1, true, cacheRepo, nil)
 	defer endCache()
 
-	ok, err := state.EffectInsertIfAbsent(cacheCtx, "idempotent", "same")
+	ok, err := state.InsertIfAbsentEffect(cacheCtx, "idempotent", "same")
 	assert.True(t, ok)
 	assert.NoError(t, err)
 
-	v, err := state.EffectLoad[string, string](upperCtx, "idempotent")
+	v, err := state.LoadEffect[string, string](upperCtx, "idempotent")
 	assert.NoError(t, err)
 	assert.Equal(t, "same", v)
 }
