@@ -51,5 +51,5 @@ func EffectSubscribeSource(
 		})
 		return
 	}
-	stream.EffectSubscribe(ctx, src, sink, dropped)
+	stream.SubscribeEffect(ctx, src, sink, dropped)
 }

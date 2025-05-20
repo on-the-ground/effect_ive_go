@@ -55,7 +55,7 @@ func EffectResourceRegistration(
 
 	peekable := newFilterablePair[time.Time](numOwners)
 
-	stream.EffectLazyFilter(ctx,
+	stream.LazyFilterEffect(ctx,
 		peekable.source,
 		peekable.sink,
 		expire,
