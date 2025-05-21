@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/on-the-ground/effect_ive_go/effects/log"
 	"github.com/on-the-ground/effect_ive_go/effects/state"
 	"github.com/on-the-ground/effect_ive_go/effects/stream"
 	"github.com/on-the-ground/effect_ive_go/shared/helper"
@@ -20,13 +21,19 @@ var (
 	ErrResourceInUse = errors.New("unable to deregister resource in use")
 )
 
+// WithEffectHandler initializes the lease effect handler.
 func WithEffectHandler(ctx context.Context) {
-	stream.MustHaveEffectHandler[time.Time](ctx)
-	state.MustHaveEffectHandler(ctx)
+	streamHandlerId := stream.MustHaveEffectHandler[time.Time](ctx)
+	stateHandlerId := state.MustHaveEffectHandler(ctx)
+	log.Effect(ctx, log.LogInfo, "stream, state handlers of this lease handler: ", map[string]interface{}{
+		"streamHander": streamHandlerId,
+		"stateHandler": stateHandlerId,
+	})
 }
 
 // ResourceRegistrationEffect registers a lease resource (key) with a max number of concurrent owners.
 // Internally stores a buffered channel of size `numOwners` as the semaphore.
+// The resource is automatically deregistered after `ttl` duration.
 func ResourceRegistrationEffect(
 	ctx context.Context,
 	key string,
@@ -54,6 +61,8 @@ func ResourceRegistrationEffect(
 	})
 }
 
+// ResourceRegistrationNoExpiryEffect registers a lease resource (key) with a max number of concurrent owners.
+// Internally stores a buffered channel of size `numOwners` as the semaphore.
 func ResourceRegistrationNoExpiryEffect(
 	ctx context.Context,
 	key string,
@@ -124,24 +133,5 @@ func ReleaseEffect(ctx context.Context, key string) (bool, error) {
 		default:
 			return true, nil
 		}
-	}
-}
-
-type SourceSinkPair[T any] struct {
-	source, sink chan T
-}
-
-func newFilterablePair[T any](numOwners int) *SourceSinkPair[T] {
-	return &SourceSinkPair[T]{
-		source: make(chan T, numOwners),
-		sink:   make(chan T),
-	}
-}
-
-func newBypassPair[T any](numOwners int) *SourceSinkPair[T] {
-	ch := make(chan T, numOwners)
-	return &SourceSinkPair[T]{
-		source: ch,
-		sink:   ch,
 	}
 }

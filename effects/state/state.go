@@ -31,7 +31,7 @@ func WithEffectHandler[K comparable, V ComparableEquatable](
 	stateStore StateStore,
 	initMap map[K]V,
 ) (context.Context, func() context.Context) {
-	concurrency.MustHaveEffectHandler(ctx)
+	concurrencyHandlerId := concurrency.MustHaveEffectHandler(ctx)
 
 	sink := make(chan TimeBoundedPayload, 2*numWorkers)
 	stateHandler := &stateHandler[K, V]{
@@ -43,7 +43,8 @@ func WithEffectHandler[K comparable, V ComparableEquatable](
 	for k, v := range initMap {
 		stateHandler.insertIfAbsent(k, v)
 	}
-	return effects.WithResumablePartitionableEffectHandler(
+
+	ctx, endOfStateHandler := effects.WithResumablePartitionableEffectHandler(
 		ctx,
 		effectmodel.NewEffectScopeConfig(bufferSize, numWorkers),
 		effectmodel.EffectState,
@@ -52,8 +53,16 @@ func WithEffectHandler[K comparable, V ComparableEquatable](
 			close(sink)
 		},
 	)
+	log.Effect(ctx, log.LogInfo, "concurrency handler of this state handler: ", map[string]interface{}{
+		"streamHander":       MustHaveEffectHandler(ctx),
+		"concurrencyHandler": concurrencyHandlerId,
+	})
+
+	return ctx, endOfStateHandler
 }
 
+// MustHaveEffectHandler ensures that the state effect handler is installed.
+// It panics if the effect handler is not installed.
 func MustHaveEffectHandler(ctx context.Context) string {
 	return effects.ResumableEffectHandlerId[Payload, any](ctx, effectmodel.EffectState)
 }
@@ -82,23 +91,37 @@ func EventSourcingEffect(
 	stream.SubscribeEffect(ctx, src, sink, dropped)
 }
 
+// LoadOverlaidEffect loads a value from the state store using the provided key.
+// It first checks the local state store and then delegates to the upper handler if not found.
+// If the value is found in the upper handler, it is inserted into the local state store.
+// It returns an error if the key is not found in both stores.
 func LoadOverlaidEffect[K comparable, V ComparableEquatable](ctx context.Context, key K) (val V, err error) {
 	return helper.GetTypedValueOf[V](func() (any, error) {
 		return effect(ctx, load[K]{Key: key})
 	})
 }
 
+// LoadEffect loads a value from the state store using the provided key.
+// It only checks the local state store and does not delegate to the upper handler.
+// It returns an error if the key is not found.
 func LoadEffect[K comparable, V ComparableEquatable](ctx context.Context, key K) (val V, err error) {
 	return helper.GetTypedValueOf[V](func() (any, error) {
 		return effect(ctx, loadWoDelegation[K]{Key: key})
 	})
 }
 
+// LoadEffects loads multiple values from the state store using the provided prefix.
+// It returns a map of key-value pairs found in the state store.
+// It does not delegate to the upper handler and returns an error if the prefix is not found.
+// Note: This function is not implemented yet.
 func LoadEffects[V ComparableEquatable](ctx context.Context, prefix string) (val map[string]V, err error) {
 	// todo https://github.com/on-the-ground/effect_ive_go/issues/46
 	panic("not implemented")
 }
 
+// InsertIfAbsentEffect inserts a new value into the state store if the key is not already present.
+// It returns true if the value was inserted, false if it already exists, and an error if the operation fails.
+// It delegates to the upper handler if the delegation flag is set on the state handler.
 func InsertIfAbsentEffect[K comparable, V ComparableEquatable](
 	ctx context.Context,
 	key K,
@@ -112,6 +135,10 @@ func InsertIfAbsentEffect[K comparable, V ComparableEquatable](
 	})
 }
 
+// InsertIfAbsentWithTTLEffect inserts a new value into the state store with a TTL if the key is not already present.
+// It returns true if the value was inserted, false if it already exists, and an error if the operation fails.
+// It sets a timer to delete the key after the specified TTL duration.
+// It delegates to the upper handler if the delegation flag is set on the state handler without setting the timer.
 func InsertIfAbsentWithTTLEffect[K comparable, V ComparableEquatable](
 	ctx context.Context,
 	key K,
@@ -129,6 +156,9 @@ func InsertIfAbsentWithTTLEffect[K comparable, V ComparableEquatable](
 	return
 }
 
+// ResetTTLEffect resets the TTL of the specified key in the state store.
+// It returns true if the TTL was reset, false if the key was not found, and an error if the operation fails.
+// It sets a new timer to delete the key after the specified TTL duration.
 func ResetTTLEffect[K comparable](
 	ctx context.Context,
 	key K,
@@ -142,6 +172,10 @@ func ResetTTLEffect[K comparable](
 	})
 }
 
+// CompareAndDeleteEffect compares the current value of the specified key with the provided old value.
+// If they match, it deletes the key from the state store and returns true.
+// If they do not match, it returns false and an error if the operation fails.
+// It delegates to the upper handler if the delegation flag is set on the state handler.
 func CompareAndDeleteEffect[K comparable, V ComparableEquatable](
 	ctx context.Context,
 	key K,
@@ -155,6 +189,10 @@ func CompareAndDeleteEffect[K comparable, V ComparableEquatable](
 	})
 }
 
+// CompareAndSwapEffect compares the current value of the specified key with the provided old value.
+// If they match, it updates the key with the new value and returns true.
+// If they do not match, it returns false and an error if the operation fails.
+// It delegates to the upper handler if the delegation flag is set on the state handler.
 func CompareAndSwapEffect[K comparable, V ComparableEquatable](
 	ctx context.Context,
 	key K,

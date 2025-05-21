@@ -47,6 +47,8 @@ func WithEffectHandler(
 	return ctx, endOfConcurrencyHandler
 }
 
+// MustHaveEffectHandler ensures that the concurrency effect handler is installed.
+// It panics if the effect handler is not installed.
 func MustHaveEffectHandler(ctx context.Context) string {
 	return effects.ResumableEffectHandlerId[Payload, struct{}](ctx, effectmodel.EffectConcurrency)
 }

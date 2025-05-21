@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+// WithTestEffectHandler installs a test log effect handler.
 func WithTestEffectHandler(
 	ctx context.Context,
 ) (context.Context, func() context.Context) {
