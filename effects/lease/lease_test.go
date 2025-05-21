@@ -5,8 +5,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/on-the-ground/effect_ive_go/effects/concurrency"
 	"github.com/on-the-ground/effect_ive_go/effects/lease"
 	"github.com/on-the-ground/effect_ive_go/effects/log"
+	"github.com/on-the-ground/effect_ive_go/effects/state"
+	"github.com/on-the-ground/effect_ive_go/effects/stream"
 	"github.com/stretchr/testify/require"
 )
 
@@ -15,8 +18,22 @@ func TestLeaseEffect_BasicLifecycle(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, endOfLeaseHandler := lease.WithInMemoryEffectHandler(ctx, 1, 1)
-	defer endOfLeaseHandler()
+	ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
+	defer endOfConccurency()
+
+	ctx, endOfStreamHandler := stream.WithEffectHandler[time.Time](ctx, 1)
+	defer endOfStreamHandler()
+
+	ctx, endOfStateHandler := state.WithEffectHandler[string, *lease.SourceSinkPair[time.Time]](
+		ctx,
+		1, 1,
+		false,
+		state.NewInMemoryStore[string](),
+		nil,
+	)
+	defer endOfStateHandler()
+
+	lease.WithEffectHandler(ctx)
 
 	ok, err := lease.ResourceRegistrationNoExpiryEffect(ctx, "resource", 1)
 	require.NoError(t, err)
@@ -63,8 +80,22 @@ func TestLease_TTL_AcquireAndRelease(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, endOfLeaseHandler := lease.WithInMemoryEffectHandler(ctx, 10, 2)
-	defer endOfLeaseHandler()
+	ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
+	defer endOfConccurency()
+
+	ctx, endOfStreamHandler := stream.WithEffectHandler[time.Time](ctx, 10)
+	defer endOfStreamHandler()
+
+	ctx, endOfStateHandler := state.WithEffectHandler[string, *lease.SourceSinkPair[time.Time]](
+		ctx,
+		10, 2,
+		false,
+		state.NewInMemoryStore[string](),
+		nil,
+	)
+	defer endOfStateHandler()
+
+	lease.WithEffectHandler(ctx)
 
 	key := "resource/ttl"
 	ttl := 100 * time.Millisecond
@@ -98,8 +129,22 @@ func TestLease_TTL_AcquireAndTimelyRelease(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ctx, endOfLeaseHandler := lease.WithInMemoryEffectHandler(ctx, 10, 2)
-	defer endOfLeaseHandler()
+	ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
+	defer endOfConccurency()
+
+	ctx, endOfStreamHandler := stream.WithEffectHandler[time.Time](ctx, 10)
+	defer endOfStreamHandler()
+
+	ctx, endOfStateHandler := state.WithEffectHandler[string, *lease.SourceSinkPair[time.Time]](
+		ctx,
+		10, 2,
+		false,
+		state.NewInMemoryStore[string](),
+		nil,
+	)
+	defer endOfStateHandler()
+
+	lease.WithEffectHandler(ctx)
 
 	key := "resource/quick"
 	ttl := 500 * time.Millisecond

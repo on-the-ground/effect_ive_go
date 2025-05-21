@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/on-the-ground/effect_ive_go/effects/concurrency"
 	"github.com/on-the-ground/effect_ive_go/effects/log"
 	"github.com/on-the-ground/effect_ive_go/effects/stream"
 	"github.com/stretchr/testify/assert"
@@ -19,6 +20,9 @@ func TestStreamEffect_MapFilterMerge(t *testing.T) {
 	ctx := context.Background()
 	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
+
+	ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
+	defer endOfConccurency()
 
 	ctx, end := stream.WithEffectHandler[int](ctx, 10)
 	defer end()
@@ -77,6 +81,9 @@ func TestStreamEffect_ShutdownPropagation(t *testing.T) {
 	ctx := context.Background()
 	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
+
+	ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
+	defer endOfConccurency()
 
 	ctx, end := stream.WithEffectHandler[int](ctx, 10)
 	defer end()
@@ -157,6 +164,9 @@ func TestSubscribeStreamPayload_OneSinkReceivesEvent(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
+	ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
+	defer endOfConccurency()
+
 	ctx, endOfStreamHandler := stream.WithEffectHandler[int](ctx, 32)
 	defer endOfStreamHandler()
 
@@ -205,6 +215,9 @@ func TestSubscribeStreamPayload_MultipleSinksSequentiallyReceiveEvent(t *testing
 	ctx := context.Background()
 	ctx, logEnd := log.WithTestEffectHandler(ctx)
 	defer logEnd()
+
+	ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
+	defer endOfConccurency()
 
 	ctx, endOfStreamHandler := stream.WithEffectHandler[int](ctx, 32)
 	defer endOfStreamHandler()
@@ -285,6 +298,9 @@ func TestStream_UnsubscribeSinkDoesNotPanic(t *testing.T) {
 	ctx, logEnd := log.WithTestEffectHandler(ctx)
 	defer logEnd()
 
+	ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
+	defer endOfConccurency()
+
 	ctx, endOfStreamHandler := stream.WithEffectHandler[int](ctx, 32)
 	defer endOfStreamHandler()
 
@@ -333,6 +349,9 @@ func TestStreamEffect_OrderByStreamPayload_SortsCorrectly(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
+	ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
+	defer endOfConccurency()
+
 	ctx, endOfStreamHandler := stream.WithEffectHandler[int](ctx, 32)
 	defer endOfStreamHandler()
 
@@ -373,6 +392,9 @@ func TestStreamEffect_MergeStreamPayload_DoubleClose(t *testing.T) {
 	ctx := context.Background()
 	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
+
+	ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
+	defer endOfConccurency()
 
 	ctx, endOfStreamHandler := stream.WithEffectHandler[int](ctx, 32)
 	defer endOfStreamHandler()
@@ -415,6 +437,9 @@ func TestStreamEffect_LazyFilter_TTLDrop(t *testing.T) {
 	ctx := context.Background()
 	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
+
+	ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
+	defer endOfConccurency()
 
 	ctx, end := stream.WithEffectHandler[Message](ctx, 10)
 	defer end()

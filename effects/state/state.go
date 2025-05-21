@@ -30,7 +30,8 @@ func WithEffectHandler[K comparable, V ComparableEquatable](
 	stateStore StateStore,
 	initMap map[K]V,
 ) (context.Context, func() context.Context) {
-	ctx, endOfConcurrency := concurrency.WithEffectHandler(ctx, bufferSize)
+	concurrency.MustHaveEffectHandler(ctx)
+
 	sink := make(chan TimeBoundedPayload, 2*numWorkers)
 	stateHandler := &stateHandler[K, V]{
 		stateStore: stateStore,
@@ -47,10 +48,13 @@ func WithEffectHandler[K comparable, V ComparableEquatable](
 		effectmodel.EffectState,
 		stateHandler.handle,
 		func() {
-			endOfConcurrency()
 			close(sink)
 		},
 	)
+}
+
+func MustHaveEffectHandler(ctx context.Context) string {
+	return effects.ResumableEffectHandlerId[Payload, any](ctx, effectmodel.EffectState)
 }
 
 func effectSource(ctx context.Context) (chan TimeBoundedPayload, error) {

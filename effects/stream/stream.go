@@ -16,14 +16,13 @@ import (
 )
 
 func WithEffectHandler[T any](parentCtx context.Context, bufferSize int) (context.Context, func() context.Context) {
-
-	ctx, endOfConcurrencyHandler := concurrency.WithEffectHandler(parentCtx, bufferSize)
+	concurrency.MustHaveEffectHandler(parentCtx)
 
 	reg := channelRegistry[T]{
 		Map: &sync.Map{},
 	}
 	ctx, endOfStreamHandler := effects.WithResumableEffectHandler(
-		ctx,
+		parentCtx,
 		bufferSize,
 		effectmodel.EffectStream,
 		reg.handleEffect,
@@ -32,7 +31,6 @@ func WithEffectHandler[T any](parentCtx context.Context, bufferSize int) (contex
 	return ctx, func() context.Context {
 		endOfStreamHandler()
 		reg.Map.Clear()
-		endOfConcurrencyHandler()
 		return parentCtx
 	}
 }
@@ -416,4 +414,8 @@ func (reg *channelRegistry[T]) arbit(ctx context.Context, source SourceAsKey[T])
 		}
 
 	}
+}
+
+func MustHaveEffectHandler[T any](ctx context.Context) string {
+	return effects.ResumableEffectHandlerId[payload[T], struct{}](ctx, effectmodel.EffectStream)
 }
