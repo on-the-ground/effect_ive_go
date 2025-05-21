@@ -1,11 +1,25 @@
 package main
 
-const environmentKey = "/env"
+import "strings"
 
-func keyOfCoordinates(x int32) string {
-	return environmentKey + "/coordinates/" + string(x)
+const root = ""
+
+const environmentKey = "env"
+
+func keyOfCoordinates(coord *Coordinate) string {
+	return strings.Join([]string{
+		root,
+		environmentKey,
+		"coordinates",
+		coord.String(),
+	}, "/")
 }
 
-func keyOfRebalanceHp(x int32) string {
-	return keyOfCoordinates(x) + "/ops/hp/rebalance"
+func keyOfAdjustHp(coord *Coordinate) string {
+	return strings.Join([]string{
+		keyOfCoordinates(coord),
+		"ops",
+		"hp",
+		"adjust",
+	}, "/")
 }

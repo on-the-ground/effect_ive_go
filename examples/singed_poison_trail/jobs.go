@@ -14,57 +14,55 @@ type Job interface {
 }
 
 type move struct {
-	*Coordinate
-	to, speed int32
-	cb        func(*Coordinate)
+	coord *Coordinate
+	to    *Coordinate
+	speed int32
+	cb    func(*Coordinate)
 }
 
-var movement = purefn.TableizeI3O1(
-	func(cur, to, speed int32) int32 {
-		remaining := to - cur
+var nextCoord = purefn.TableizeI3O1(
+	func(cur, to *Coordinate, speed int32) (next *Coordinate) {
+		remaining := to.X() - cur.X()
 		if speed <= remaining {
-			return speed
+			return newCoordinate(cur.X() + speed)
 		} else if -speed < remaining && remaining < speed {
-			return remaining
+			return newCoordinate(cur.X() + remaining)
 		} else /* remaining <= -m.speed */ {
-			return -1 * speed
+			return newCoordinate(cur.X() + -1*speed)
 		}
 	},
 	8,
 )
 
 func (m *move) TickCallback(ctx context.Context) {
-	cur := m.x.Load()
-	delta := movement(cur, m.to, m.speed)
-	m.x.CompareAndSwap(cur, cur+delta)
-	m.cb(m.Coordinate)
+	cur := m.coord
+	nxt := nextCoord(cur, m.to, m.speed)
+	m.coord.CompareAndSwap(cur, nxt)
+	m.cb(m.coord)
 }
 
 func (m *move) Done() bool {
-	return m.x.Load() == m.to
+	return m.coord.Compare(m.to)
 }
-func newMove(position *Coordinate, to, speed int32, callbacks ...func(*Coordinate)) Job {
-	if len(callbacks) != 1 {
-		panic("only one callback is allowed")
-	}
+
+func NewMove(coord, to *Coordinate, speed int32, cb func(*Coordinate)) Job {
 	return &move{
-		Coordinate: position,
-		to:         to,
-		speed:      speed,
-		cb:         callbacks[0],
+		coord: coord,
+		to:    to,
+		speed: speed,
+		cb:    cb,
 	}
 }
 
-type rebalanceHP struct {
-	*Coordinate
-	hp *HP
+type adjustHP struct {
+	coord *Coordinate
+	hp    *HP
 }
 
-func (r *rebalanceHP) TickCallback(ctx context.Context) {
-	pos := r.x.Load()
-	prefix := keyOfRebalanceHp(pos)
+func (r *adjustHP) TickCallback(ctx context.Context) {
+	prefix := keyOfAdjustHp(r.coord)
 
-	rebalanceRatePairs, err := state.LoadEffects[float64](ctx, prefix)
+	adjustRatePairs, err := state.LoadEffects[float64](ctx, prefix)
 	if err != nil {
 		log.Effect(ctx, log.LogError, "fail to LoadEffect", map[string]interface{}{
 			"key":   prefix,
@@ -73,12 +71,20 @@ func (r *rebalanceHP) TickCallback(ctx context.Context) {
 		})
 		return
 	}
-	rebalanceRate := 1.0
-	for _, rate := range rebalanceRatePairs {
-		rebalanceRate *= rate
+	adjustRate := 1.0
+	for _, rate := range adjustRatePairs {
+		adjustRate *= rate
 	}
-	r.hp.val = int32(float64(r.hp.val) * rebalanceRate)
+	r.hp.val = int32(float64(r.hp.val) * adjustRate)
 }
-func (r *rebalanceHP) Done() bool {
+
+func (r *adjustHP) Done() bool {
 	return false
+}
+
+func NewAdjustHP(coord *Coordinate, hp *HP) Job {
+	return &adjustHP{
+		coord: coord,
+		hp:    hp,
+	}
 }
