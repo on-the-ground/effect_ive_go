@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/on-the-ground/effect_ive_go/effects/concurrency"
 	"github.com/on-the-ground/effect_ive_go/effects/log"
 	"github.com/on-the-ground/effect_ive_go/effects/state"
 	"github.com/on-the-ground/effect_ive_go/effects/stream"
@@ -23,6 +24,9 @@ func TestStateEffect_BasicLookup(t *testing.T) {
 	defer endOfLogHandler()
 
 	testFn := func(store state.StateStore) {
+		ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
+		defer endOfConccurency()
+
 		ctx, endOfStateHandler := state.WithEffectHandler(
 			ctx,
 			1, 1,
@@ -57,6 +61,9 @@ func TestStateEffect_KeyNotFound(t *testing.T) {
 	defer endOfLogHandler()
 
 	testFn := func(store state.StateStore) {
+		ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
+		defer endOfConccurency()
+
 		ctx, endOfStateHandler := state.WithEffectHandler(
 			ctx,
 			1, 1,
@@ -89,6 +96,9 @@ func TestStateEffect_DelegatesToUpperScope(t *testing.T) {
 	defer endOfLogHandler()
 
 	testFn := func(store state.StateStore) {
+		ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
+		defer endOfConccurency()
+
 		upperCtx, upperClose := state.WithEffectHandler(
 			ctx,
 			1, 1,
@@ -137,6 +147,9 @@ func TestStateEffect_ConcurrentPartitionedAccess(t *testing.T) {
 			key := fmt.Sprintf("key%d", i)
 			states[key] = fmt.Sprintf("value%d", i)
 		}
+
+		ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
+		defer endOfConccurency()
 
 		// register the state handler with partitioning
 		ctx, endOfStateHandler := state.WithEffectHandler(
@@ -212,6 +225,9 @@ func TestStateEffect_ConcurrentReadWriteMixed(t *testing.T) {
 	defer endOfLogHandler()
 
 	testFn := func(store state.StateStore) {
+		ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
+		defer endOfConccurency()
+
 		ctx, endOfStateHandler := state.WithEffectHandler(
 			ctx,
 			8, 8,
@@ -279,6 +295,9 @@ func TestStateEffect_ContextTimeout(t *testing.T) {
 	defer endOfLogHandler()
 
 	testFn := func(store state.StateStore) {
+		ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
+		defer endOfConccurency()
+
 		ctx, endOfStateHandler := state.WithEffectHandler[string, any](
 			ctx,
 			1, 1,
@@ -317,6 +336,9 @@ func TestStateEffect_SetAndGet(t *testing.T) {
 	defer endOfLogHandler()
 
 	testFn := func(store state.StateStore) {
+		ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
+		defer endOfConccurency()
+
 		ctx, endOfStateHandler := state.WithEffectHandler[string, int](
 			ctx,
 			1, 1,
@@ -350,6 +372,9 @@ func TestInsertIfAbsentWithExpiryEffect(t *testing.T) {
 	defer endOfLog()
 
 	testFn := func(store state.StateStore) {
+		ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
+		defer endOfConccurency()
+
 		ctx, endOfState := state.WithEffectHandler[string, string](
 			ctx,
 			1, 1,
@@ -396,6 +421,9 @@ func TestResetTTL_ExtendsLifetime(t *testing.T) {
 	defer endOfLogHandler()
 
 	testFn := func(store state.StateStore) {
+		ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
+		defer endOfConccurency()
+
 		ctx, endOfStateHandler := state.WithEffectHandler[string, string](
 			ctx,
 			1, 1,
@@ -454,6 +482,9 @@ func TestStateEffect_SourcePayloadReturnsSink(t *testing.T) {
 	testFn := func(store state.StateStore) {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
+
+		ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
+		defer endOfConccurency()
 
 		ctx, endOfStreamHandler := stream.WithEffectHandler[state.TimeBoundedPayload](ctx, 1)
 		defer endOfStreamHandler()
@@ -522,6 +553,9 @@ func TestStore_Delegation(t *testing.T) {
 	defer endOfLogHandler()
 
 	testFn := func(store state.StateStore) {
+		ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
+		defer endOfConccurency()
+
 		// Tier 2 - has key x=1
 		ctx2, endOfTier2 := state.WithEffectHandler(
 			ctx,
@@ -583,6 +617,9 @@ func TestCompareAndSwap_Delegation(t *testing.T) {
 	defer endOfLogHandler()
 
 	testFn := func(store state.StateStore) {
+		ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
+		defer endOfConccurency()
+
 		// Tier 2 - has key x=1
 		ctx2, endOfTier2 := state.WithEffectHandler(
 			ctx,
@@ -655,6 +692,9 @@ func TestCompareAndDelete_Delegation(t *testing.T) {
 	defer endOfLogHandler()
 
 	testFn := func(store state.StateStore) {
+		ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
+		defer endOfConccurency()
+
 		// Tier 2 - has key y=99
 		ctx2, endOfTier2 := state.WithEffectHandler(
 			ctx,
@@ -713,6 +753,9 @@ func TestInsertIfAbsent_DelegationConflict_CAS_Success(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
+	ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
+	defer endOfConccurency()
+
 	// Upper tier with key "conflict" already set to "old"
 	upperRepo := state.NewInMemoryStore[string]()
 	upperCtx, endUpper := state.WithEffectHandler(ctx, 1, 1, false, upperRepo, map[string]string{
@@ -740,6 +783,9 @@ func TestInsertIfAbsent_DelegationConflict_CAS_Success_2(t *testing.T) {
 	ctx := context.Background()
 	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
+
+	ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
+	defer endOfConccurency()
 
 	// Upper tier starts with "x" = "v1"
 	upperRepo := state.NewInMemoryStore[string]()
@@ -782,6 +828,9 @@ func TestInsertIfAbsent_DelegationConflict_EqualValues_Skip(t *testing.T) {
 	ctx := context.Background()
 	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
+
+	ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
+	defer endOfConccurency()
 
 	// Upper tier has the same value
 	upperRepo := state.NewInMemoryStore[string]()

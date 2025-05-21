@@ -20,25 +20,9 @@ var (
 	ErrResourceInUse = errors.New("unable to deregister resource in use")
 )
 
-// WithDistributedEffectHandler returns a context with an distributed lease handler using the state effect system as backend storage.
-// todo func WithDistributedEffectHandler() {}
-
-// WithInMemoryEffectHandler returns a context with an in-memory lease handler using buffered channels.
-// Each key will map to a `peekable[time.Time]` of size `numOwners`, acting like a semaphore.
-func WithInMemoryEffectHandler(ctx context.Context, bufferSize, numWorkers int) (context.Context, func() context.Context) {
-	ctxStream, endOfStreamHandler := stream.WithEffectHandler[time.Time](ctx, bufferSize)
-	ctxStreamState, endOfStateHandler := state.WithEffectHandler[string, *sourceSinkPair[time.Time]](
-		ctxStream,
-		bufferSize, numWorkers,
-		false,
-		state.NewInMemoryStore[string](),
-		nil,
-	)
-	return ctxStreamState, func() context.Context {
-		endOfStateHandler()
-		endOfStreamHandler()
-		return ctx
-	}
+func WithEffectHandler(ctx context.Context) {
+	stream.MustHaveEffectHandler[time.Time](ctx)
+	state.MustHaveEffectHandler(ctx)
 }
 
 // ResourceRegistrationEffect registers a lease resource (key) with a max number of concurrent owners.
@@ -88,8 +72,8 @@ func ResourceRegistrationNoExpiryEffect(
 // ResourceDeregistrationEffect attempts to remove the lease resource (key) from state.
 // Deregistration fails if the resource is currently acquired (non-empty channel).
 func ResourceDeregistrationEffect(ctx context.Context, key string) (res bool, err error) {
-	var peekable *sourceSinkPair[time.Time]
-	peekable, err = state.LoadEffect[string, *sourceSinkPair[time.Time]](ctx, key)
+	var peekable *SourceSinkPair[time.Time]
+	peekable, err = state.LoadEffect[string, *SourceSinkPair[time.Time]](ctx, key)
 	if err != nil {
 		res, err = false, fmt.Errorf("%w: key %s", ErrUnregisteredResource, key)
 		return
@@ -114,7 +98,7 @@ func ResourceDeregistrationEffect(ctx context.Context, key string) (res bool, er
 // If the resource is registered and capacity is available, the lease is granted.
 // If capacity is full, this call blocks unless context expires.
 func AcquisitionEffect(ctx context.Context, key string) (bool, error) {
-	if peekable, err := state.LoadEffect[string, *sourceSinkPair[time.Time]](ctx, key); err != nil {
+	if peekable, err := state.LoadEffect[string, *SourceSinkPair[time.Time]](ctx, key); err != nil {
 		return false, fmt.Errorf("%w: key %s", ErrUnregisteredResource, key)
 	} else {
 		select {
@@ -129,7 +113,7 @@ func AcquisitionEffect(ctx context.Context, key string) (bool, error) {
 // ReleaseEffect releases a previously acquired lease for the given key.
 // If the lease was not acquired or key is missing, it returns an error.
 func ReleaseEffect(ctx context.Context, key string) (bool, error) {
-	if peekable, err := state.LoadEffect[string, *sourceSinkPair[time.Time]](ctx, key); err != nil {
+	if peekable, err := state.LoadEffect[string, *SourceSinkPair[time.Time]](ctx, key); err != nil {
 		return false, fmt.Errorf("%w: key %s", ErrUnregisteredResource, key)
 	} else {
 		select {
@@ -143,20 +127,20 @@ func ReleaseEffect(ctx context.Context, key string) (bool, error) {
 	}
 }
 
-type sourceSinkPair[T any] struct {
+type SourceSinkPair[T any] struct {
 	source, sink chan T
 }
 
-func newFilterablePair[T any](numOwners int) *sourceSinkPair[T] {
-	return &sourceSinkPair[T]{
+func newFilterablePair[T any](numOwners int) *SourceSinkPair[T] {
+	return &SourceSinkPair[T]{
 		source: make(chan T, numOwners),
 		sink:   make(chan T),
 	}
 }
 
-func newBypassPair[T any](numOwners int) *sourceSinkPair[T] {
+func newBypassPair[T any](numOwners int) *SourceSinkPair[T] {
 	ch := make(chan T, numOwners)
-	return &sourceSinkPair[T]{
+	return &SourceSinkPair[T]{
 		source: ch,
 		sink:   ch,
 	}

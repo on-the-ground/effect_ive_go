@@ -47,6 +47,10 @@ func WithEffectHandler(
 	return ctx, endOfConcurrencyHandler
 }
 
+func MustHaveEffectHandler(ctx context.Context) string {
+	return effects.ResumableEffectHandlerId[Payload, struct{}](ctx, effectmodel.EffectConcurrency)
+}
+
 // WithEffectHandler installs a resumable concurrency effect handler.
 //
 // It allows `Effect(ctx, [...])` to spawn multiple goroutines under managed scope.
