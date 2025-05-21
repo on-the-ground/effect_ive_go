@@ -10,6 +10,7 @@ import (
 	"github.com/on-the-ground/effect_ive_go/effects/concurrency"
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 	"github.com/on-the-ground/effect_ive_go/effects/log"
+	"github.com/on-the-ground/effect_ive_go/effects/stream"
 	"github.com/on-the-ground/effect_ive_go/shared"
 	"github.com/on-the-ground/effect_ive_go/shared/helper"
 )
@@ -61,6 +62,24 @@ func effectSource(ctx context.Context) (chan TimeBoundedPayload, error) {
 	return helper.GetTypedValueOf[chan TimeBoundedPayload](func() (any, error) {
 		return effect(ctx, Source{})
 	})
+}
+
+// EventSourcingEffect subscribes to the effect source and sends the received payloads to the provided sink and dropped channels.
+// It logs an error if the effect source is not found.
+// WARNING: Stream effect handler must be created before calling this function.
+func EventSourcingEffect(
+	ctx context.Context,
+	sink chan<- TimeBoundedPayload,
+	dropped chan<- TimeBoundedPayload,
+) {
+	src, err := effectSource(ctx)
+	if err != nil {
+		log.Effect(ctx, log.LogError, "fail to subscribe source, effect source not found", map[string]interface{}{
+			"err": err,
+		})
+		return
+	}
+	stream.SubscribeEffect(ctx, src, sink, dropped)
 }
 
 func LoadOverlaidEffect[K comparable, V ComparableEquatable](ctx context.Context, key K) (val V, err error) {
