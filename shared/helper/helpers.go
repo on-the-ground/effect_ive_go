@@ -44,6 +44,8 @@ func MustGetTypedValue[T any](getFn func() (any, error)) T {
 
 var ErrMaxAttempts = fmt.Errorf("max attempts reached")
 
+// Retry executes a function and retries it if it returns an error.
+// It will retry until the maximum number of attempts is reached.
 func Retry(maxAttemps int, fn func() error) error {
 	numAttempts := 0
 	for {

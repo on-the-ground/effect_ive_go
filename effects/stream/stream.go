@@ -15,8 +15,10 @@ import (
 	"go.uber.org/zap"
 )
 
+// WithEffectHandler initializes the stream effect handler.
+// It allows `Effect(ctx, [...])` to spawn multiple goroutines under managed scope.
 func WithEffectHandler[T any](parentCtx context.Context, bufferSize int) (context.Context, func() context.Context) {
-	concurrency.MustHaveEffectHandler(parentCtx)
+	concurrencyHandlerId := concurrency.MustHaveEffectHandler(parentCtx)
 
 	reg := channelRegistry[T]{
 		Map: &sync.Map{},
@@ -27,6 +29,12 @@ func WithEffectHandler[T any](parentCtx context.Context, bufferSize int) (contex
 		effectmodel.EffectStream,
 		reg.handleEffect,
 	)
+	streamHandlerId := MustHaveEffectHandler[T](ctx)
+
+	log.Effect(parentCtx, log.LogInfo, "concurrency handler of this stream handler: ", map[string]interface{}{
+		"streamHander":       streamHandlerId,
+		"concurrencyHandler": concurrencyHandlerId,
+	})
 
 	return ctx, func() context.Context {
 		endOfStreamHandler()
@@ -35,6 +43,9 @@ func WithEffectHandler[T any](parentCtx context.Context, bufferSize int) (contex
 	}
 }
 
+// MapEffect applies a mapping function to each element from the source channel
+// and sends the result to the sink channel.
+// It closes the sink channel when done.
 func MapEffect[T any, R any](
 	ctx context.Context,
 	source <-chan T,
@@ -53,6 +64,8 @@ func MapEffect[T any, R any](
 	})
 }
 
+// PipeEffect reads from the source channel and writes to the sink channel.
+// It closes the sink channel when done.
 func PipeEffect[T any](
 	ctx context.Context,
 	source <-chan T,
@@ -70,6 +83,9 @@ func PipeEffect[T any](
 	})
 }
 
+// EagerFilterEffect filters elements from the source channel based on a predicate
+// and sends the matching elements to the sink channel immediately.
+// It closes the sink channel when done.
 func EagerFilterEffect[T any](
 	ctx context.Context,
 	source <-chan T,
@@ -90,6 +106,10 @@ func EagerFilterEffect[T any](
 	})
 }
 
+// LazyFilterEffect filters elements from the source channel based on a predicate
+// and polls the sink channel and checks the predicate on every pollInterval to emulate lazy evaluation.
+// It sends the matching elements to the sink channel when the predicate is satisfied at consumption time.
+// It closes the sink channel when done.
 func LazyFilterEffect[T any](
 	ctx context.Context,
 	source <-chan T,
@@ -123,6 +143,10 @@ func LazyFilterEffect[T any](
 	})
 }
 
+// MergeEffect merges multiple source channels into a single sink channel.
+// It closes the sink channel when all sources are done.
+// It uses a goroutine for each source channel to read from it concurrently.
+// The sink channel is closed when all sources are done.
 func MergeEffect[T any](
 	ctx context.Context,
 	sources []<-chan T,
@@ -148,6 +172,13 @@ func MergeEffect[T any](
 	})
 }
 
+// SubscribeEffect subscribes to a source channel and sends the received values to the sink channel.
+// It also sends dropped values to the dropped channel.
+// It closes the sink channel when done.
+// The dropped channel is optional and can be nil.
+// If the dropped channel is nil, dropped values are ignored.
+// Warning: never close the sink channel before unsubscribing.
+// Closing the sink channel will cause a panic if there are still subscribers.
 func SubscribeEffect[T any](
 	ctx context.Context,
 	source SourceAsKey[T],
@@ -160,6 +191,8 @@ func SubscribeEffect[T any](
 	)
 }
 
+// UnsubscribeEffect unsubscribes from a source channel.
+// It removes the sink channel from the list of subscribers.
 func UnsubscribeEffect[T any](
 	ctx context.Context,
 	source SourceAsKey[T],
@@ -171,6 +204,11 @@ func UnsubscribeEffect[T any](
 	)
 }
 
+// OrderByEffect orders the elements from the source channel using a bounded buffer
+// and sends the ordered elements to the sink channel.
+// It uses an ordered buffer to maintain the order of elements.
+// The buffer replaces the temporal window dilimited by the watermark.
+// The size of the buffer is the spatial window size for ordering.
 func OrderByEffect[T any](
 	ctx context.Context,
 	windowSize int,
@@ -416,6 +454,8 @@ func (reg *channelRegistry[T]) arbit(ctx context.Context, source SourceAsKey[T])
 	}
 }
 
+// MustHaveEffectHandler returns the effect handler ID for the stream effect handler.
+// It panics if the effect handler is not found in the context.
 func MustHaveEffectHandler[T any](ctx context.Context) string {
 	return effects.ResumableEffectHandlerId[payload[T], struct{}](ctx, effectmodel.EffectStream)
 }
