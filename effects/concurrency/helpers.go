@@ -7,7 +7,7 @@ import (
 )
 
 // AwaitAll waits for all tasks to complete and returns their results.
-func AwaitAll(ctx context.Context, taskChs ...<-chan handlers.ResumableResult[Payload]) ([]Payload, []error) {
+func AwaitAll[T any](ctx context.Context, taskChs ...<-chan handlers.ResumableResult[T]) ([]T, []error) {
 	numTasks := len(taskChs)
 	if numTasks == 0 {
 		return nil, nil
@@ -16,17 +16,17 @@ func AwaitAll(ctx context.Context, taskChs ...<-chan handlers.ResumableResult[Pa
 	ctx, endOfConcurrencyHandler := WithEffectHandler(ctx, 1)
 	defer endOfConcurrencyHandler()
 
-	payloads := make([]Payload, numTasks)
+	results := make([]T, numTasks)
 	errors := make([]error, numTasks)
 
-	awaitThunkOf := func(i int, taskCh <-chan handlers.ResumableResult[Payload]) func(ctx context.Context) {
+	awaitThunkOf := func(i int, taskCh <-chan handlers.ResumableResult[T]) func(ctx context.Context) {
 		return func(ctx context.Context) {
 			select {
 			case result, ok := <-taskCh:
 				if !ok {
 					return
 				}
-				payloads[i] = result.Value
+				results[i] = result.Value
 				errors[i] = result.Err
 			case <-ctx.Done():
 				errors[i] = ctx.Err()
@@ -39,5 +39,5 @@ func AwaitAll(ctx context.Context, taskChs ...<-chan handlers.ResumableResult[Pa
 		Effect(ctx, awaitThunkOf(i, taskCh))
 	}
 
-	return payloads, errors
+	return results, errors
 }
