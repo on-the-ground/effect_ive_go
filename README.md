@@ -4,6 +4,7 @@
   <em>“The Zen of the Effect-ive Gopher” – calm, centered, and side-effect free.</em>
 </p>
 
+# The [presentation](https://on-the-ground.github.io/effect_ive_go/#/) is ready!
 
 # What is Effect-ive Go?
 
