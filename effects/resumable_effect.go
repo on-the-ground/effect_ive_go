@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 
+	"github.com/google/uuid"
 	"github.com/on-the-ground/effect_ive_go/effects/internal/handlers"
 	"github.com/on-the-ground/effect_ive_go/effects/internal/helper"
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
@@ -15,21 +16,29 @@ import (
 // This handler is suitable for effects that don't require partitioning.
 // It can be used for one-shot effects or those that don't require ordering by key.
 func WithResumableEffectHandler[P any, R any](
-	ctx context.Context,
+	pctx context.Context,
 	bufferSize int,
 	enum effectmodel.EffectEnum,
 	handleFn func(context.Context, P) (R, error),
 	teardown ...func(),
 ) (context.Context, func() context.Context) {
 	td := normalizeTeardown(teardown)
-	handler := handlers.NewResumableHandler(ctx, bufferSize, handleFn, td)
-	ctxWith := context.WithValue(ctx, enum, handler)
+	ctxForHandler, cancelHandler := context.WithCancel(pctx)
+	handler := handlers.NewResumableHandler[P, R](
+		ctxForHandler,
+		uuid.New().String(),
+		bufferSize,
+		handleFn,
+	)
+
+	ctx := context.WithValue(pctx, enum, handler)
 	log.Printf("created resumable effect handler: effectId: %v, enum: %v", handler.EffectId, enum)
 
-	return ctxWith, func() context.Context {
-		handler.Close()
+	return ctx, func() context.Context {
+		td()
+		cancelHandler()
 		log.Printf("closed resumable effect handler: effectId: %v, enum:%v", handler.EffectId, enum)
-		return ctx
+		return pctx
 	}
 }
 
@@ -43,21 +52,29 @@ func WithResumableEffectHandler[P any, R any](
 //	ctx, cancel := WithResumablePartitionableEffectHandler(ctx, config, MyEffectEnum, handleFn)
 //	defer cancel()
 func WithResumablePartitionableEffectHandler[P effectmodel.Partitionable, R any](
-	ctx context.Context,
+	pctx context.Context,
 	config effectmodel.EffectScopeConfig,
 	enum effectmodel.EffectEnum,
 	handleFn func(context.Context, P) (R, error),
 	teardown ...func(),
 ) (context.Context, func() context.Context) {
 	td := normalizeTeardown(teardown)
-	handler := handlers.NewPartitionableResumableHandler(ctx, config, handleFn, td)
-	ctxWith := context.WithValue(ctx, enum, handler)
+	ctxForHandler, cancelHandler := context.WithCancel(pctx)
+	handler := handlers.NewResumablePartitionableHandler(
+		ctxForHandler,
+		uuid.New().String(),
+		config.NumWorkers,
+		config.BufferSize,
+		handleFn,
+	)
+	ctx := context.WithValue(pctx, enum, handler)
 	log.Printf("created resumable effect handler: effectId: %v, enum: %v", handler.EffectId, enum)
 
-	return ctxWith, func() context.Context {
-		handler.Close()
+	return ctx, func() context.Context {
+		td()
+		cancelHandler()
 		log.Printf("closed resumable effect handler: effectId: %v, enum:%v", handler.EffectId, enum)
-		return ctx
+		return pctx
 	}
 }
 
