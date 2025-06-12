@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 
+	"github.com/google/uuid"
 	"github.com/on-the-ground/effect_ive_go/effects/internal/handlers"
 	"github.com/on-the-ground/effect_ive_go/effects/internal/helper"
 	sharedHelper "github.com/on-the-ground/effect_ive_go/shared/helper"
@@ -16,21 +17,29 @@ import (
 // Suitable for one-shot effects like logging, telemetry, or background publishing.
 // This handler executes without returning a result.
 func WithFireAndForgetEffectHandler[P any](
-	ctx context.Context,
+	pctx context.Context,
 	bufferSize int,
 	enum effectmodel.EffectEnum,
 	handleFn func(context.Context, P),
 	teardown ...func(),
 ) (context.Context, func() context.Context) {
 	td := normalizeTeardown(teardown)
-	handler := handlers.NewFireAndForgetHandler(ctx, bufferSize, handleFn, td)
-	ctxWith := context.WithValue(ctx, enum, handler)
+	ctxForHandler, cancelHandler := context.WithCancel(pctx)
+	handler := handlers.NewFireAndForgetHandler(
+		ctxForHandler,
+		uuid.New().String(),
+		bufferSize,
+		handleFn,
+	)
+
+	ctx := context.WithValue(pctx, enum, handler)
 	log.Printf("created fire/forget effect handler: effectId: %v, enum: %v", handler.EffectId, enum)
 
-	return ctxWith, func() context.Context {
-		handler.Close()
+	return ctx, func() context.Context {
+		td()
+		cancelHandler()
 		log.Printf("closed fire/forget effect handler: effectId: %v, enum: %v", handler.EffectId, enum)
-		return ctx
+		return pctx
 	}
 }
 
@@ -39,21 +48,30 @@ func WithFireAndForgetEffectHandler[P any](
 // Hash-based dispatching ensures that effects with the same PartitionKey() are handled
 // by the same goroutine. Useful for ensuring ordering by key.
 func WithFireAndForgetPartitionableEffectHandler[P effectmodel.Partitionable](
-	ctx context.Context,
+	pctx context.Context,
 	config effectmodel.EffectScopeConfig,
 	enum effectmodel.EffectEnum,
 	handleFn func(context.Context, P),
 	teardown ...func(),
 ) (context.Context, func() context.Context) {
 	td := normalizeTeardown(teardown)
-	handler := handlers.NewPartitionableFireAndForgetHandler(ctx, config, handleFn, td)
-	ctxWith := context.WithValue(ctx, enum, handler)
+	ctxForHandler, cancelHandler := context.WithCancel(pctx)
+	handler := handlers.NewFireAndForgetPartitionableHandler(
+		ctxForHandler,
+		uuid.New().String(),
+		config.NumWorkers,
+		config.BufferSize,
+		handleFn,
+	)
+
+	ctx := context.WithValue(pctx, enum, handler)
 	log.Printf("created fire/forget effect handler: effectId: %v, enum: %v", handler.EffectId, enum)
 
-	return ctxWith, func() context.Context {
-		handler.Close()
+	return ctx, func() context.Context {
+		td()
+		cancelHandler()
 		log.Printf("closed fire/forget effect handler: effectId: %v, enum: %v", handler.EffectId, enum)
-		return ctx
+		return pctx
 	}
 }
 

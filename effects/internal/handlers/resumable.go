@@ -7,62 +7,50 @@ import (
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 )
 
-func NewResumableHandler[P any, R any](
-	ctx context.Context,
-	bufferSize int,
-	handleFn func(context.Context, P) (R, error),
-	teardown func(),
-) ResumableHandler[P, R] {
-	return ResumableHandler[P, R]{
-		effectScope: newEffectScope(
-			NewSingleQueue(
-				ctx,
-				bufferSize,
-				func(ctx context.Context, msg ResumableEffectMessage[P, R]) {
-					select {
-					case <-ctx.Done():
-					case msg.ResumeCh <- ResumableResultFrom(handleFn(ctx, msg.Payload)):
-					}
-
-					close(msg.ResumeCh)
-				},
-			),
-			teardown,
-		),
-	}
+type ResumableHandler[P any, R any] struct {
+	EffectId   string
+	dispatcher WorkerDispatcher[ResumableEffectMessage[P, R]]
 }
 
-func NewPartitionableResumableHandler[P effectmodel.Partitionable, R any](
+func NewResumableHandler[P any, R any](
 	ctx context.Context,
-	config effectmodel.EffectScopeConfig,
+	effectId string,
+	bufferSize int,
 	handleFn func(context.Context, P) (R, error),
-	teardown func(),
 ) ResumableHandler[P, R] {
-	ctx, cancelFn := context.WithCancel(ctx)
 	return ResumableHandler[P, R]{
-		effectScope: newEffectScope(
-			NewPartitionedQueue(
-				ctx,
-				config.NumWorkers,
-				config.BufferSize,
-				func(ctx context.Context, msg ResumableEffectMessage[P, R]) {
-					select {
-					case <-ctx.Done():
-					case msg.ResumeCh <- ResumableResultFrom(handleFn(ctx, msg.Payload)):
-					}
-					close(msg.ResumeCh)
-				},
-			),
-			func() {
-				teardown()
-				cancelFn()
+		EffectId: effectId,
+		dispatcher: NewSingleQueue(ctx, bufferSize,
+			func(ctx context.Context, msg ResumableEffectMessage[P, R]) {
+				select {
+				case <-ctx.Done():
+				case msg.ResumeCh <- ResumableResultFrom(handleFn(ctx, msg.Payload)):
+				}
+				close(msg.ResumeCh)
 			},
 		),
 	}
 }
 
-type ResumableHandler[P any, R any] struct {
-	*effectScope[ResumableEffectMessage[P, R]]
+func NewResumablePartitionableHandler[P effectmodel.Partitionable, R any](
+	ctx context.Context,
+	effectId string,
+	numWorkers int,
+	bufferSize int,
+	handleFn func(context.Context, P) (R, error),
+) ResumableHandler[P, R] {
+	return ResumableHandler[P, R]{
+		EffectId: effectId,
+		dispatcher: NewPartitionedQueue(ctx, numWorkers, bufferSize,
+			func(ctx context.Context, msg ResumableEffectMessage[P, R]) {
+				select {
+				case <-ctx.Done():
+				case msg.ResumeCh <- ResumableResultFrom(handleFn(ctx, msg.Payload)):
+				}
+				close(msg.ResumeCh)
+			},
+		),
+	}
 }
 
 func (rh ResumableHandler[P, R]) PerformEffect(ctx context.Context, payload P) <-chan ResumableResult[R] {
@@ -103,7 +91,7 @@ func ResumableResultFrom[R any](res R, err error) ResumableResult[R] {
 	return ResumableResult[R]{Value: res, Err: err}
 }
 
-var _ effectmodel.Partitionable = ResumableEffectMessage[any, any]{}
+var _ effectmodel.Partitionable = ResumableEffectMessage[effectmodel.Partitionable, any]{}
 
 type ResumableEffectMessage[P any, R any] struct {
 	Payload  P
