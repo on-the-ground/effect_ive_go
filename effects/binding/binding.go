@@ -53,7 +53,7 @@ func WithEffectHandler(
 //
 // Returns either the value found or an error if the key is not found and no upper scope provides it.
 func Effect(ctx context.Context, key string) (val any, err error) {
-	resultCh := effects.PerformResumableEffect[Payload, any](ctx, effectKey, Payload(key))
+	resultCh := effects.PerformResumableEffect[Payload](ctx, effectKey, Payload(key))
 	select {
 	case res, ok := <-resultCh:
 		if ok {

@@ -51,7 +51,7 @@ func WithEffectHandler(
 // MustHaveEffectHandler ensures that the concurrency effect handler is installed.
 // It panics if the effect handler is not installed.
 func MustHaveEffectHandler(ctx context.Context) string {
-	return effects.ResumableEffectHandlerId[Payload, struct{}](ctx, effectKey)
+	return effects.ResumableEffectHandlerId[Payload](ctx, effectKey)
 }
 
 // WithEffectHandler installs a resumable concurrency effect handler.
@@ -62,7 +62,7 @@ func MustHaveEffectHandler(ctx context.Context) string {
 // - WaitGroup + cancellation tracking ensures children are joined on shutdown.
 // - Worker count is fixed to 1 (non-partitioned).
 func Effect(ctx context.Context, fns ...func(context.Context)) {
-	<-effects.PerformResumableEffect[Payload, struct{}](ctx, effectKey, fns)
+	<-effects.PerformResumableEffect[Payload](ctx, effectKey, fns)
 }
 
 type Payload []func(context.Context)
@@ -125,7 +125,7 @@ func (s *supervisor) appendCancel(cancelFn context.CancelFunc) {
 func (s *supervisor) spawnConcurrentChildren(
 	parentContext context.Context,
 	functions Payload,
-) (struct{}, error) {
+) (any, error) {
 	ready := sync.WaitGroup{}
 
 	for _, fn := range functions {

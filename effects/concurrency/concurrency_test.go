@@ -212,19 +212,19 @@ func TestAwaitAll_Success(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ch1 := make(chan handlers.ResumableResult[concurrency.Payload], 1)
-	ch2 := make(chan handlers.ResumableResult[concurrency.Payload], 1)
+	ch1 := make(chan handlers.ResumableResult, 1)
+	ch2 := make(chan handlers.ResumableResult, 1)
 
-	ch1 <- handlers.ResumableResult[concurrency.Payload]{Value: concurrency.Payload{func(context.Context) {}}, Err: nil}
+	ch1 <- handlers.ResumableResult{Value: concurrency.Payload{func(context.Context) {}}, Err: nil}
 	close(ch1)
 
-	ch2 <- handlers.ResumableResult[concurrency.Payload]{Value: concurrency.Payload{func(context.Context) {}}, Err: nil}
+	ch2 <- handlers.ResumableResult{Value: concurrency.Payload{func(context.Context) {}}, Err: nil}
 	close(ch2)
 
 	ctx, endOfConcurrencyHandler := concurrency.WithEffectHandler(ctx, 1)
 	defer endOfConcurrencyHandler()
 
-	results, errs := concurrency.AwaitAll(ctx, ch1, ch2)
+	results, errs := concurrency.AwaitAll[concurrency.Payload](ctx, ch1, ch2)
 
 	if len(results) != 2 || len(errs) != 2 {
 		t.Fatalf("expected 2 results and 2 errors, got %d and %d", len(results), len(errs))
@@ -241,10 +241,10 @@ func TestAwaitAll_ClosedChannel(t *testing.T) {
 	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
 	defer endOfLogHandler()
 
-	ch := make(chan handlers.ResumableResult[concurrency.Payload])
+	ch := make(chan handlers.ResumableResult)
 	close(ch)
 
-	results, errs := concurrency.AwaitAll(ctx, ch)
+	results, errs := concurrency.AwaitAll[concurrency.Payload](ctx, ch)
 
 	require.Equal(t, 1, len(results))
 	require.Equal(t, 1, len(errs))
@@ -258,7 +258,7 @@ func TestAwaitAll_CancelledContext(t *testing.T) {
 	defer endOfLogHandler()
 
 	ctx, cancel := context.WithCancel(ctx)
-	ch := make(chan handlers.ResumableResult[concurrency.Payload])
+	ch := make(chan handlers.ResumableResult)
 
 	ctx, endOfConcurrencyHandler := concurrency.WithEffectHandler(ctx, 1)
 	defer endOfConcurrencyHandler()
@@ -268,7 +268,7 @@ func TestAwaitAll_CancelledContext(t *testing.T) {
 		cancel()
 	}()
 
-	results, errs := concurrency.AwaitAll(ctx, ch)
+	results, errs := concurrency.AwaitAll[concurrency.Payload](ctx, ch)
 
 	require.Equal(t, 1, len(results))
 	require.Equal(t, 1, len(errs))
