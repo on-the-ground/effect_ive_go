@@ -118,7 +118,7 @@ func ValidateUser(ctx context.Context, user User) bool
 - Effect categories : Resumable / FireAndForget / ~Abortive(not suitable for Go)~
 
 - Declaring an Effect:
-	- Lookup handler by effect enum via context<!-- .element: style="font-size: 80%;" -->
+	- Lookup handler by effectKey via context<!-- .element: style="font-size: 80%;" -->
 		- Context is only for handler discovery
 	- Pass payload via handler channel<!-- .element: style="font-size: 80%;" -->
 	- Wait for result (Resumable), or send without waiting (FireAndForget)<!-- .element: style="font-size: 80%;margin-bottom: 1em;" -->

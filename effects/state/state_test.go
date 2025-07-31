@@ -2,8 +2,8 @@ package state_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -12,6 +12,7 @@ import (
 	"github.com/on-the-ground/effect_ive_go/effects/log"
 	"github.com/on-the-ground/effect_ive_go/effects/state"
 	"github.com/on-the-ground/effect_ive_go/effects/stream"
+	"github.com/on-the-ground/effect_ive_go/shared/helper"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -76,7 +77,7 @@ func TestStateEffect_KeyNotFound(t *testing.T) {
 		defer endOfStateHandler()
 
 		_, err := state.LoadOverlaidEffect[string, int](ctx, "bar")
-		if err == nil || !strings.Contains(err.Error(), "key not found") {
+		if err == nil || !errors.Is(err, helper.ErrNoEffectHandler) {
 			t.Fatalf("expected key-not-found error, got: %v", err)
 		}
 	}

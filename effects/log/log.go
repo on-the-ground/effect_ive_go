@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/on-the-ground/effect_ive_go/effects"
-	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 	"go.uber.org/zap"
 )
 
@@ -25,6 +24,8 @@ const (
 	LogDebug LogLevel = "debug"
 )
 
+const effectKey effects.EffectKey = "github.com/on-the-ground/effect_ive_go/effects/log/effectKey"
+
 // payload is the payload structure for logging effect.
 // It contains the log level, message string, and optional structured fields.
 type payload struct {
@@ -39,7 +40,7 @@ func (lp payload) PartitionKey() string {
 
 // WithZapEffectHandler registers a fire-and-forget log effect handler using zap.Logger.
 // It reads buffer size and worker count from the binding effect configuration.
-// The returned context includes the handler under the EffectLog enum.
+// The returned context includes the handler under the EffectLog effectKey.
 // The teardown function should be called when the effect handler is no longer needed.
 // If the teardown function is called early, the effect handler will be closed.
 // The context returned by the teardown function should be used for further operations.
@@ -51,7 +52,7 @@ func WithZapEffectHandler(
 	return effects.WithFireAndForgetEffectHandler(
 		ctx,
 		bufferSize,
-		effectmodel.EffectLog,
+		effectKey,
 		func(ctx context.Context, payload payload) {
 			fields := make([]zap.Field, 0, len(payload.Fields))
 			for k, v := range payload.Fields {
@@ -82,7 +83,7 @@ func WithZapEffectHandler(
 // Effect performs a fire-and-forget log effect using the EffectLog handler in the context.
 // This should be used to emit structured logs within an effect-managed execution scope.
 func Effect(ctx context.Context, level LogLevel, msg string, fields map[string]interface{}) {
-	effects.FireAndForgetEffect(ctx, effectmodel.EffectLog, payload{
+	effects.FireAndForgetEffect(ctx, effectKey, payload{
 		Level:   level,
 		Message: msg,
 		Fields:  fields,

@@ -2,13 +2,14 @@ package binding_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"testing"
 
 	"github.com/on-the-ground/effect_ive_go/effects/binding"
 	"github.com/on-the-ground/effect_ive_go/effects/log"
+	"github.com/on-the-ground/effect_ive_go/shared/helper"
 )
 
 func TestBindingEffect_BasicLookup(t *testing.T) {
@@ -49,7 +50,7 @@ func TestBindingEffect_KeyNotFound(t *testing.T) {
 	defer closeFn()
 
 	_, err := binding.Effect(ctx, "bar")
-	if err == nil || !strings.Contains(err.Error(), "key not found") {
+	if err == nil || !errors.Is(err, helper.ErrNoEffectHandler) {
 		t.Fatalf("expected key-not-found error, got: %v", err)
 	}
 }

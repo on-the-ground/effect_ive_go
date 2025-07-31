@@ -2,11 +2,14 @@ package binding
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/on-the-ground/effect_ive_go/effects"
-	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
+	"github.com/on-the-ground/effect_ive_go/shared/helper"
 )
+
+const effectKey effects.EffectKey = "github.com/on-the-ground/effect_ive_go/effects/binding/effectKey"
 
 // Payload defines a key-based lookup payload.
 // Used as input to the Binding effect.
@@ -40,8 +43,8 @@ func WithEffectHandler(
 	}
 	return effects.WithResumablePartitionableEffectHandler(
 		ctx,
-		effectmodel.NewEffectScopeConfig(bufferSize, numWorkers),
-		effectmodel.EffectBinding,
+		bufferSize, numWorkers,
+		effectKey,
 		bindingHandler.handle,
 	)
 }
@@ -50,7 +53,7 @@ func WithEffectHandler(
 //
 // Returns either the value found or an error if the key is not found and no upper scope provides it.
 func Effect(ctx context.Context, key string) (val any, err error) {
-	resultCh := effects.PerformResumableEffect[Payload, any](ctx, effectmodel.EffectBinding, Payload(key))
+	resultCh := effects.PerformResumableEffect[Payload, any](ctx, effectKey, Payload(key))
 	select {
 	case res, ok := <-resultCh:
 		if ok {
@@ -76,10 +79,15 @@ func normalizeBindingMap(bm map[string]any) map[string]any {
 func delegateBindingEffect(upperCtx context.Context, key string) (res any, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			// Handle panic and return a nil value with an error
-			// indicating that the effect handler is not available to delegate.
-			res = nil
-			err = fmt.Errorf("key not found: %v", r)
+			fmt.Println("Recovered from panic in delegateBindingEffect:", r)
+			if r, ok := r.(error); ok && errors.Is(r, helper.ErrNoEffectHandler) {
+				// Handle panic and return a nil value with an error
+				// indicating that the effect handler is not available to delegate.
+				res = nil
+				err = r
+			} else {
+				panic(r) // re-raise the panic if it's not the expected error
+			}
 		}
 	}()
 

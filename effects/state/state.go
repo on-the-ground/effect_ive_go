@@ -8,12 +8,13 @@ import (
 
 	"github.com/on-the-ground/effect_ive_go/effects"
 	"github.com/on-the-ground/effect_ive_go/effects/concurrency"
-	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 	"github.com/on-the-ground/effect_ive_go/effects/log"
 	"github.com/on-the-ground/effect_ive_go/effects/stream"
 	"github.com/on-the-ground/effect_ive_go/shared"
 	"github.com/on-the-ground/effect_ive_go/shared/helper"
 )
+
+const effectKey effects.EffectKey = "github.com/on-the-ground/effect_ive_go/effects/state/effectKey"
 
 // WithEffectHandler registers a resumable, partitionable effect handler for managing key-value state.
 // It stores the internal state in a memory-safe sync.Map and supports sharded processing.
@@ -46,8 +47,8 @@ func WithEffectHandler[K comparable, V ComparableEquatable](
 
 	ctx, endOfStateHandler := effects.WithResumablePartitionableEffectHandler(
 		ctx,
-		effectmodel.NewEffectScopeConfig(bufferSize, numWorkers),
-		effectmodel.EffectState,
+		bufferSize, numWorkers,
+		effectKey,
 		stateHandler.handle,
 		func() {
 			close(sink)
@@ -64,7 +65,7 @@ func WithEffectHandler[K comparable, V ComparableEquatable](
 // MustHaveEffectHandler ensures that the state effect handler is installed.
 // It panics if the effect handler is not installed.
 func MustHaveEffectHandler(ctx context.Context) string {
-	return effects.ResumableEffectHandlerId[Payload, any](ctx, effectmodel.EffectState)
+	return effects.ResumableEffectHandlerId[Payload, any](ctx, effectKey)
 }
 
 func effectSource(ctx context.Context) (chan TimeBoundedPayload, error) {
@@ -209,7 +210,7 @@ func CompareAndSwapEffect[K comparable, V ComparableEquatable](
 
 // effect performs a state operation (get, set, delete) using the EffectState handler.
 func effect(ctx context.Context, payload Payload) (val any, err error) {
-	resultCh := effects.PerformResumableEffect[Payload, any](ctx, effectmodel.EffectState, payload)
+	resultCh := effects.PerformResumableEffect[Payload, any](ctx, effectKey, payload)
 	select {
 	case res, ok := <-resultCh:
 		if ok {
@@ -230,7 +231,7 @@ var ErrNoSuchKey = fmt.Errorf("key not found")
 func delegateStateEffect(upperCtx context.Context, payload Payload) (res any, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			if r, ok := r.(error); ok && errors.Is(r, effectmodel.ErrNoEffectHandler) {
+			if r, ok := r.(error); ok && errors.Is(r, helper.ErrNoEffectHandler) {
 				// Handle panic and return a nil value with an error
 				// indicating that the effect handler is not available to delegate.
 				res = nil

@@ -6,20 +6,21 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/on-the-ground/effect_ive_go/effects/internal/handlers"
-	"github.com/on-the-ground/effect_ive_go/effects/internal/helper"
 	sharedHelper "github.com/on-the-ground/effect_ive_go/shared/helper"
 
 	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 )
 
-// WithFireAndForgetEffectHandler registers a fire-and-forget effect handler for a given effect enum.
+type EffectKey string
+
+// WithFireAndForgetEffectHandler registers a fire-and-forget effect handler for a given effectKey.
 //
 // Suitable for one-shot effects like logging, telemetry, or background publishing.
 // This handler executes without returning a result.
 func WithFireAndForgetEffectHandler[P any](
 	pctx context.Context,
 	bufferSize int,
-	enum effectmodel.EffectEnum,
+	effectKey EffectKey,
 	handleFn func(context.Context, P),
 	teardown ...func(),
 ) (context.Context, func() context.Context) {
@@ -32,13 +33,13 @@ func WithFireAndForgetEffectHandler[P any](
 		handleFn,
 	)
 
-	ctx := context.WithValue(pctx, enum, handler)
-	log.Printf("created fire/forget effect handler: effectId: %v, enum: %v", handler.EffectId, enum)
+	ctx := context.WithValue(pctx, effectKey, handler)
+	log.Printf("created fire/forget effect handler: effectId: %v, effectKey: %v", handler.EffectId, effectKey)
 
 	return ctx, func() context.Context {
 		td()
 		cancelHandler()
-		log.Printf("closed fire/forget effect handler: effectId: %v, enum: %v", handler.EffectId, enum)
+		log.Printf("closed fire/forget effect handler: effectId: %v, effectKey: %v", handler.EffectId, effectKey)
 		return pctx
 	}
 }
@@ -49,8 +50,8 @@ func WithFireAndForgetEffectHandler[P any](
 // by the same goroutine. Useful for ensuring ordering by key.
 func WithFireAndForgetPartitionableEffectHandler[P effectmodel.Partitionable](
 	pctx context.Context,
-	config effectmodel.EffectScopeConfig,
-	enum effectmodel.EffectEnum,
+	bufferSize, numWorkers int,
+	effectKey EffectKey,
 	handleFn func(context.Context, P),
 	teardown ...func(),
 ) (context.Context, func() context.Context) {
@@ -59,34 +60,34 @@ func WithFireAndForgetPartitionableEffectHandler[P effectmodel.Partitionable](
 	handler := handlers.NewFireAndForgetPartitionableHandler(
 		ctxForHandler,
 		uuid.New().String(),
-		config.NumWorkers,
-		config.BufferSize,
+		numWorkers,
+		bufferSize,
 		handleFn,
 	)
 
-	ctx := context.WithValue(pctx, enum, handler)
-	log.Printf("created fire/forget effect handler: effectId: %v, enum: %v", handler.EffectId, enum)
+	ctx := context.WithValue(pctx, effectKey, handler)
+	log.Printf("created fire/forget effect handler: effectId: %v, effectKey: %v", handler.EffectId, effectKey)
 
 	return ctx, func() context.Context {
 		td()
 		cancelHandler()
-		log.Printf("closed fire/forget effect handler: effectId: %v, enum: %v", handler.EffectId, enum)
+		log.Printf("closed fire/forget effect handler: effectId: %v, effectKey: %v", handler.EffectId, effectKey)
 		return pctx
 	}
 }
 
-// FireAndForgetEffect triggers a fire-and-forget effect for the given enum and payload.
+// FireAndForgetEffect triggers a fire-and-forget effect for the given effectKey and payload.
 //
 // The handler will process the payload asynchronously.
-// Panics if no handler is registered for the given enum.
+// Panics if no handler is registered for the given effectKey.
 func FireAndForgetEffect[P any](
 	ctx context.Context,
-	enum effectmodel.EffectEnum,
+	effectKey EffectKey,
 	payload P,
 ) {
 	handler := sharedHelper.MustGetTypedValue[handlers.FireAndForgetHandler[P]](
 		func() (any, error) {
-			return helper.GetHandler(ctx, enum)
+			return GetHandler(ctx, effectKey)
 		},
 	)
 	handler.FireAndForgetEffect(ctx, payload)
@@ -94,26 +95,12 @@ func FireAndForgetEffect[P any](
 
 func FireAndForgetEffectHandlerId[P any](
 	ctx context.Context,
-	enum effectmodel.EffectEnum,
+	effectKey EffectKey,
 ) string {
 	handler := sharedHelper.MustGetTypedValue[handlers.FireAndForgetHandler[P]](
 		func() (any, error) {
-			return helper.GetHandler(ctx, enum)
+			return GetHandler(ctx, effectKey)
 		},
 	)
 	return handler.EffectId
-}
-
-// normalizeTeardown flattens optional teardown functions into a single callable.
-//
-// Accepts either 0 or 1 teardown functions. Panics if more than one is passed.
-func normalizeTeardown(teardown []func()) func() {
-	switch len(teardown) {
-	case 1:
-		return teardown[0]
-	case 0:
-		return func() {}
-	default:
-		panic("normalizeTeardown: only one or zero teardown functions allowed")
-	}
 }

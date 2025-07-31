@@ -4,6 +4,8 @@ import (
 	"fmt"
 )
 
+var ErrNoEffectHandler = fmt.Errorf("no effect handler registered for this effect")
+
 // GetTypedValueOf safely asserts the result of a getter function to the expected type T.
 // Returns an error if type assertion fails.
 func GetTypedValueOf[T any](getFn func() (any, error)) (T, error) {
@@ -11,12 +13,12 @@ func GetTypedValueOf[T any](getFn func() (any, error)) (T, error) {
 
 	res, err := getFn()
 	if err != nil {
-		return zero, fmt.Errorf("failed to get value: %w", err)
+		return zero, fmt.Errorf("%w: %w", ErrNoEffectHandler, err)
 	}
 
 	val, ok := res.(T)
 	if !ok {
-		return zero, fmt.Errorf("unexpected type: %T", res)
+		return zero, fmt.Errorf("%w: unexpected type: %T", ErrNoEffectHandler, res)
 	}
 
 	return val, nil
