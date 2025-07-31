@@ -11,7 +11,7 @@ import (
 const effectKey effects.EffectKey = "github.com/on-the-ground/effect_ive_go/effects/task/effectKey"
 
 // WithEffectHandler registers a TaskEffect handler that supports async result retrieval.
-func WithEffectHandler[R any](
+func WithEffectHandler(
 	ctx context.Context,
 	bufferSize int,
 ) (context.Context, func() context.Context) {
@@ -19,8 +19,8 @@ func WithEffectHandler[R any](
 		ctx,
 		bufferSize,
 		effectKey,
-		func(ctx context.Context, asyncFn payload[R]) (R, error) {
-			done := make(chan handlers.ResumableResult[R], 1)
+		func(ctx context.Context, asyncFn payload) (any, error) {
+			done := make(chan handlers.ResumableResult, 1)
 			ready := make(chan struct{})
 			go func() {
 				close(ready)
@@ -47,12 +47,12 @@ func WithEffectHandler[R any](
 			select {
 			case res, ok := <-done:
 				if !ok {
-					var zero R
+					var zero any
 					return zero, errors.New("task result channel closed")
 				}
 				return res.Value, res.Err
 			case <-ctx.Done():
-				return *new(R), ctx.Err()
+				return *new(any), ctx.Err()
 			}
 		},
 	)
@@ -61,13 +61,13 @@ func WithEffectHandler[R any](
 }
 
 // Effect performs an asynchronous task and returns a channel with the result.
-func Effect[R any](ctx context.Context, asyncFn func(context.Context) (R, error)) <-chan handlers.ResumableResult[R] {
-	return effects.PerformResumableEffect[payload[R], R](ctx, effectKey, payload[R](asyncFn))
+func Effect(ctx context.Context, asyncFn func(context.Context) (any, error)) <-chan handlers.ResumableResult {
+	return effects.PerformResumableEffect(ctx, effectKey, payload(asyncFn))
 }
 
 // payload defines an asynchronous operation that returns a value of type R.
-type payload[R any] func(context.Context) (R, error)
+type payload func(context.Context) (any, error)
 
-func (_ payload[R]) PartitionKey() string {
+func (_ payload) PartitionKey() string {
 	return "unpartitioned"
 }

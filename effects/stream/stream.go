@@ -186,7 +186,7 @@ func SubscribeEffect[T any](
 	sink chan<- T,
 	dropped chan<- T,
 ) {
-	effects.PerformResumableEffect[payload[T], struct{}](ctx,
+	effects.PerformResumableEffect[payload[T]](ctx,
 		effectKey,
 		newSubscribePayload(source, sink, dropped),
 	)
@@ -199,7 +199,7 @@ func UnsubscribeEffect[T any](
 	source SourceAsKey[T],
 	sink chan<- T,
 ) {
-	effects.PerformResumableEffect[payload[T], struct{}](ctx,
+	effects.PerformResumableEffect[payload[T]](ctx,
 		effectKey,
 		newUnsubscribePayload(source, sink),
 	)
@@ -252,7 +252,7 @@ type channelRegistry[T any] struct {
 	*sync.Map
 }
 
-func (reg channelRegistry[T]) handleEffect(ctx context.Context, msg payload[T]) (struct{}, error) {
+func (reg channelRegistry[T]) handleEffect(ctx context.Context, msg payload[T]) (any, error) {
 	switch msg := msg.(type) {
 	case subscribePayload[T]:
 		return reg.subscribe(ctx, msg)
@@ -458,5 +458,5 @@ func (reg *channelRegistry[T]) arbit(ctx context.Context, source SourceAsKey[T])
 // MustHaveEffectHandler returns the effect handler ID for the stream effect handler.
 // It panics if the effect handler is not found in the context.
 func MustHaveEffectHandler[T any](ctx context.Context) string {
-	return effects.ResumableEffectHandlerId[payload[T], struct{}](ctx, effectKey)
+	return effects.ResumableEffectHandlerId[payload[T]](ctx, effectKey)
 }

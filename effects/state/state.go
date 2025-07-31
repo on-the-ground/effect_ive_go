@@ -65,7 +65,7 @@ func WithEffectHandler[K comparable, V ComparableEquatable](
 // MustHaveEffectHandler ensures that the state effect handler is installed.
 // It panics if the effect handler is not installed.
 func MustHaveEffectHandler(ctx context.Context) string {
-	return effects.ResumableEffectHandlerId[Payload, any](ctx, effectKey)
+	return effects.ResumableEffectHandlerId[Payload](ctx, effectKey)
 }
 
 func effectSource(ctx context.Context) (chan TimeBoundedPayload, error) {
@@ -210,7 +210,7 @@ func CompareAndSwapEffect[K comparable, V ComparableEquatable](
 
 // effect performs a state operation (get, set, delete) using the EffectState handler.
 func effect(ctx context.Context, payload Payload) (val any, err error) {
-	resultCh := effects.PerformResumableEffect[Payload, any](ctx, effectKey, payload)
+	resultCh := effects.PerformResumableEffect[Payload](ctx, effectKey, payload)
 	select {
 	case res, ok := <-resultCh:
 		if ok {

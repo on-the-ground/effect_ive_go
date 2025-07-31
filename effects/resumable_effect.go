@@ -14,11 +14,11 @@ import (
 //
 // This handler is suitable for effects that don't require partitioning.
 // It can be used for one-shot effects or those that don't require ordering by key.
-func WithResumableEffectHandler[P any, R any](
+func WithResumableEffectHandler[P any](
 	pctx context.Context,
 	bufferSize int,
 	effectKey EffectKey,
-	handleFn func(context.Context, P) (R, error),
+	handleFn func(context.Context, P) (any, error),
 	teardown ...func(),
 ) (context.Context, func() context.Context) {
 	td := normalizeTeardown(teardown)
@@ -50,11 +50,11 @@ func WithResumableEffectHandler[P any, R any](
 //
 //	ctx, cancel := WithResumablePartitionableEffectHandler(ctx, config, MyEffectKey, handleFn)
 //	defer cancel()
-func WithResumablePartitionableEffectHandler[P effectmodel.Partitionable, R any](
+func WithResumablePartitionableEffectHandler[P effectmodel.Partitionable](
 	pctx context.Context,
 	bufferSize, numWorkers int,
 	effectKey EffectKey,
-	handleFn func(context.Context, P) (R, error),
+	handleFn func(context.Context, P) (any, error),
 	teardown ...func(),
 ) (context.Context, func() context.Context) {
 	td := normalizeTeardown(teardown)
@@ -81,12 +81,12 @@ func WithResumablePartitionableEffectHandler[P effectmodel.Partitionable, R any]
 //
 // It returns the value sent through resumeCh by the handler logic.
 // Panics if no handler is registered for the given effectKey.
-func PerformResumableEffect[P any, R any](
+func PerformResumableEffect[P any](
 	ctx context.Context,
 	effectKey EffectKey,
 	payload P,
-) <-chan handlers.ResumableResult[R] {
-	handler := sharedHelper.MustGetTypedValue[handlers.ResumableHandler[P, R]](
+) <-chan handlers.ResumableResult {
+	handler := sharedHelper.MustGetTypedValue[handlers.ResumableHandler[P]](
 		func() (any, error) {
 			return GetHandler(ctx, effectKey)
 		},
@@ -94,11 +94,11 @@ func PerformResumableEffect[P any, R any](
 	return handler.PerformEffect(ctx, payload)
 }
 
-func ResumableEffectHandlerId[P any, R any](
+func ResumableEffectHandlerId[P any](
 	ctx context.Context,
 	effectKey EffectKey,
 ) string {
-	handler := sharedHelper.MustGetTypedValue[handlers.ResumableHandler[P, R]](
+	handler := sharedHelper.MustGetTypedValue[handlers.ResumableHandler[P]](
 		func() (any, error) {
 			return GetHandler(ctx, effectKey)
 		},
