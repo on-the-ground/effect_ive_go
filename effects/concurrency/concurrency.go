@@ -5,9 +5,10 @@ import (
 	"sync"
 
 	"github.com/on-the-ground/effect_ive_go/effects"
-	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 	"github.com/on-the-ground/effect_ive_go/effects/log"
 )
+
+const effectKey effects.EffectKey = "github.com/on-the-ground/effect_ive_go/effects/concurrency/effectKey"
 
 // WithEffectHandler installs a resumable concurrency effect handler.
 //
@@ -36,7 +37,7 @@ func WithEffectHandler(
 	ctx, endOfConcurrencyHandler := effects.WithResumableEffectHandler(
 		ctx,
 		bufferSize,
-		effectmodel.EffectConcurrency,
+		effectKey,
 		sv.spawnConcurrentChildren,
 		func() {
 			sv.waitChildren(ctx)
@@ -50,7 +51,7 @@ func WithEffectHandler(
 // MustHaveEffectHandler ensures that the concurrency effect handler is installed.
 // It panics if the effect handler is not installed.
 func MustHaveEffectHandler(ctx context.Context) string {
-	return effects.ResumableEffectHandlerId[Payload, struct{}](ctx, effectmodel.EffectConcurrency)
+	return effects.ResumableEffectHandlerId[Payload, struct{}](ctx, effectKey)
 }
 
 // WithEffectHandler installs a resumable concurrency effect handler.
@@ -61,7 +62,7 @@ func MustHaveEffectHandler(ctx context.Context) string {
 // - WaitGroup + cancellation tracking ensures children are joined on shutdown.
 // - Worker count is fixed to 1 (non-partitioned).
 func Effect(ctx context.Context, fns ...func(context.Context)) {
-	<-effects.PerformResumableEffect[Payload, struct{}](ctx, effectmodel.EffectConcurrency, fns)
+	<-effects.PerformResumableEffect[Payload, struct{}](ctx, effectKey, fns)
 }
 
 type Payload []func(context.Context)

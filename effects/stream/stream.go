@@ -8,12 +8,13 @@ import (
 
 	"github.com/on-the-ground/effect_ive_go/effects"
 	"github.com/on-the-ground/effect_ive_go/effects/concurrency"
-	effectmodel "github.com/on-the-ground/effect_ive_go/effects/internal/model"
 	"github.com/on-the-ground/effect_ive_go/effects/log"
 	"github.com/on-the-ground/effect_ive_go/shared/helper"
 	"github.com/on-the-ground/effect_ive_go/shared/orderedbuffer"
 	"go.uber.org/zap"
 )
+
+const effectKey effects.EffectKey = "github.com/on-the-ground/effect_ive_go/effects/stream/effectKey"
 
 // WithEffectHandler initializes the stream effect handler.
 // It allows `Effect(ctx, [...])` to spawn multiple goroutines under managed scope.
@@ -26,7 +27,7 @@ func WithEffectHandler[T any](parentCtx context.Context, bufferSize int) (contex
 	ctx, endOfStreamHandler := effects.WithResumableEffectHandler(
 		parentCtx,
 		bufferSize,
-		effectmodel.EffectStream,
+		effectKey,
 		reg.handleEffect,
 	)
 	streamHandlerId := MustHaveEffectHandler[T](ctx)
@@ -186,7 +187,7 @@ func SubscribeEffect[T any](
 	dropped chan<- T,
 ) {
 	effects.PerformResumableEffect[payload[T], struct{}](ctx,
-		effectmodel.EffectStream,
+		effectKey,
 		newSubscribePayload(source, sink, dropped),
 	)
 }
@@ -199,7 +200,7 @@ func UnsubscribeEffect[T any](
 	sink chan<- T,
 ) {
 	effects.PerformResumableEffect[payload[T], struct{}](ctx,
-		effectmodel.EffectStream,
+		effectKey,
 		newUnsubscribePayload(source, sink),
 	)
 }
@@ -457,5 +458,5 @@ func (reg *channelRegistry[T]) arbit(ctx context.Context, source SourceAsKey[T])
 // MustHaveEffectHandler returns the effect handler ID for the stream effect handler.
 // It panics if the effect handler is not found in the context.
 func MustHaveEffectHandler[T any](ctx context.Context) string {
-	return effects.ResumableEffectHandlerId[payload[T], struct{}](ctx, effectmodel.EffectStream)
+	return effects.ResumableEffectHandlerId[payload[T], struct{}](ctx, effectKey)
 }

@@ -31,7 +31,7 @@
 //
 // This package exports:
 //   - Built-in handlers (log, state, binding, concurrency)
-//   - Reusable helper types (payloads, enums, handler interfaces)
+//   - Reusable helper types (payloads, effectKeys, handler interfaces)
 //   - Core effect system to define your own
 //
 // # Design Philosophy
