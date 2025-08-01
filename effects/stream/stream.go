@@ -11,7 +11,6 @@ import (
 	"github.com/on-the-ground/effect_ive_go/effects/log"
 	"github.com/on-the-ground/effect_ive_go/shared/helper"
 	"github.com/on-the-ground/effect_ive_go/shared/orderedbuffer"
-	"go.uber.org/zap"
 )
 
 const effectKey effects.EffectKey = "github.com/on-the-ground/effect_ive_go/effects/stream/effectKey"
@@ -186,7 +185,7 @@ func SubscribeEffect[T any](
 	sink chan<- T,
 	dropped chan<- T,
 ) {
-	effects.PerformResumableEffect[payload[T]](ctx,
+	effects.PerformResumableEffect(ctx,
 		effectKey,
 		newSubscribePayload(source, sink, dropped),
 	)
@@ -199,7 +198,7 @@ func UnsubscribeEffect[T any](
 	source SourceAsKey[T],
 	sink chan<- T,
 ) {
-	effects.PerformResumableEffect[payload[T]](ctx,
+	effects.PerformResumableEffect(ctx,
 		effectKey,
 		newUnsubscribePayload(source, sink),
 	)
@@ -333,9 +332,6 @@ func (reg channelRegistry[T]) subscribe(ctx context.Context, msg subscribePayloa
 	if firstSink {
 		reg.Store(msg.Source.String(), &RegisteredList[T]{Registered: []*sinkDropPair[T]{newPair}})
 		concurrency.Effect(ctx, func(ctx context.Context) {
-			logger, _ := zap.NewProduction()
-			ctx, endOfLogHandler := log.WithZapEffectHandler(ctx, 10, logger)
-			defer endOfLogHandler()
 			defer func() {
 				if r := recover(); r != nil {
 					log.Effect(ctx, log.LogError, "panic while registering sink", map[string]interface{}{

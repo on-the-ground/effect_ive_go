@@ -7,14 +7,11 @@ import (
 	"time"
 
 	"github.com/on-the-ground/effect_ive_go/effects/internal/handlers"
-	"github.com/on-the-ground/effect_ive_go/effects/log"
 	"github.com/on-the-ground/effect_ive_go/effects/task"
 )
 
 func TestTaskEffect_Success(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
-	defer endOfLogHandler()
 
 	ctx, endOfTaskHandler := task.WithEffectHandler(ctx, 1)
 	defer endOfTaskHandler()
@@ -40,8 +37,6 @@ func TestTaskEffect_Success(t *testing.T) {
 func TestTaskEffect_Cancelled(t *testing.T) {
 	t.Skip("non-deterministic test. work in progress")
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
-	defer endOfLogHandler()
 
 	// Cancel after a little bit while.
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
@@ -79,8 +74,6 @@ func TestTaskEffect_Cancelled(t *testing.T) {
 
 func TestTaskEffect_Parallel(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
-	defer endOfLogHandler()
 
 	ctx, endOfTaskHandler := task.WithEffectHandler(ctx, 10)
 	defer endOfTaskHandler()

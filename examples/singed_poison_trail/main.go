@@ -5,18 +5,13 @@ import (
 	"time"
 
 	"github.com/on-the-ground/effect_ive_go/effects/concurrency"
-	"github.com/on-the-ground/effect_ive_go/effects/log"
 	"github.com/on-the-ground/effect_ive_go/effects/state"
 	"github.com/on-the-ground/effect_ive_go/effects/stream"
-	"go.uber.org/zap"
 )
 
 func main() {
 
 	ctx := context.Background()
-	logger, _ := zap.NewProduction()
-	ctx, endOfLog := log.WithZapEffectHandler(ctx, 10, logger)
-	defer endOfLog()
 
 	tickSrc := time.NewTicker(250 * time.Millisecond)
 	defer tickSrc.Stop()
