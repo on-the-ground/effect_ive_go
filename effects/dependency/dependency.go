@@ -1,3 +1,14 @@
+// Package dependency provides an effect for interface-based dependency resolution
+// using runtime duck typing.
+//
+// A handler can register a list of objects. When an effect is performed, the
+// handler attempts to match the requested interface type against its registered
+// dependencies. If a match is found, the handler delegates the method call
+// using the provided Quacker implementation. Otherwise, the request is delegated
+// upward through the context chain.
+//
+// This enables dynamic, testable, and scoped dependency injection without using
+// global containers or code generation.
 package dependency
 
 import (
@@ -15,6 +26,16 @@ import (
 // Exported so consumers can refer to the handler key.
 const effectKey effects.EffectKey = "github.com/on-the-ground/effect_ive_go/effects/dependency/effectKey"
 
+// WithEffectHandler registers a dependency effect handler into the context.
+// The handler can resolve method calls dynamically by matching interface types
+// (duck) to the given list of concrete dependency objects.
+//
+// Each time a matching dependency is found, the provided Quacker will be invoked
+// with that object as the receiver.
+//
+// This allows dynamic, runtime dependency injection for interface-based dispatch.
+//
+// Returns the new context and a teardown function to remove the handler.
 func WithEffectHandler(
 	pctx context.Context,
 	bufferSize int,
@@ -45,11 +66,19 @@ func WithEffectHandler(
 	return ctx, endOfHandler
 }
 
+// Quacker represents an abstraction for deferred method invocation.
+// It encapsulates a parsed method signature and arguments, and provides
+// a way to dynamically invoke that method on a given receiver.
 type Quacker interface {
 	WithReceiver(receiver any) Quacker
 	Quack(ctx context.Context) (any, error)
 }
 
+// Effect performs a resumable dependency resolution effect.
+// The generic type parameter D should be the interface type to match.
+//
+// The given Quacker will be invoked against a matched dependency that implements D.
+// If no handler exists in the context, the call panics unless recovered via delegateDependencyEffect.
 func Effect[D any](ctx context.Context, quacker Quacker) <-chan handlers.ResumableResult {
 	key := reflect.TypeOf((*D)(nil)).Elem()
 
@@ -61,6 +90,8 @@ func Effect[D any](ctx context.Context, quacker Quacker) <-chan handlers.Resumab
 	return effects.PerformResumableEffect(ctx, effectKey, pl)
 }
 
+// payload is the internal structure passed as the effect payload.
+// It includes the desired interface type (duck) and the Quacker for execution.
 type payload struct {
 	duck    reflect.Type
 	quacker Quacker
@@ -70,6 +101,9 @@ func (p payload) PartitionKey() string {
 	return fmt.Sprintf("%v", p.duck)
 }
 
+// implements checks whether the given dependency object satisfies the requested
+// interface type (duck), accounting for pointer types and compatibility across
+// Go versions.
 func implements(dep any, duck reflect.Type) bool {
 	depType := reflect.TypeOf(dep)
 
@@ -87,6 +121,13 @@ func implements(dep any, duck reflect.Type) bool {
 	return depType.Implements(duck)
 }
 
+// delegateDependencyEffect attempts to forward the dependency resolution
+// to parent handlers in the context chain.
+//
+// If no handler is found, it recovers from the panic and returns a single-element
+// channel containing the "no handler" error.
+//
+// This fallback allows the top-level handler to gracefully handle unresolvable effects.
 func delegateDependencyEffect(pctx context.Context, pl payload) (ch <-chan handlers.ResumableResult) {
 	defer func() {
 		if r := recover(); r != nil {

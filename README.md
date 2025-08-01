@@ -127,7 +127,74 @@ func ValidateUser(ctx context.Context, user User) bool
 	- Partitionable handlers process in parallel based on partitions<!-- .element: style="font-size: 80%;" -->
 
 
----
+## [Dependency](https://pkg.go.dev/github.com/on-the-ground/effect_ive_go/effects/dependency)
+
+- The `Dependency` effect implements runtime dependency resolution based on Go interfaces.
+	- Handlers act as dynamic dispatchers that **delegate method calls** to objects implementing the requested interface.
+	- Objects are matched using **duck typing**: signature-based validation at runtime.
+
+- This enables interface-based inversion of control without relying on DI containers or global registries.
+
+```go
+type Dep1 struct{}
+
+func (Dep1) Id() string { return "dep1" }
+func (Dep1) Fn1(ctx context.Context) (string, error) {
+	return "result from dep1", nil
+}
+
+type Dep2 struct{}
+
+func (*Dep2) Id() string { return "dep2" }
+
+type DepINeed interface {
+	Id() string
+	Fn1(ctx context.Context) (string, error)
+}
+
+type idGetter struct {
+	DepINeed
+	prefix string
+}
+
+func (i idGetter) WithReceiver(dependency any) dependency.Quacker {
+	i.DepINeed = dependency.(DepINeed)
+	return i
+}
+
+func (i idGetter) Quack(ctx context.Context) (any, error) {
+	if i.DepINeed == nil {
+		return nil, errors.New("receiver not set in Quacker")
+	}
+	return i.prefix + i.DepINeed.Id(), nil
+}
+
+func newIdGetter(prefix string) idGetter {
+	return idGetter{prefix: prefix}
+}
+
+func TestDependencyEffect_Success(t *testing.T) {
+	ctx := context.Background()
+
+	ctx, endDep := dependency.WithEffectHandler(ctx, 1, []any{&Dep2{}, Dep1{}})
+	defer endDep()
+
+	ch := dependency.Effect[DepINeed](ctx, newIdGetter("test"))
+	res := <-ch
+
+	require.NoError(t, res.Err)
+	require.Equal(t, "testdep1", res.Value)
+}
+```
+- Delegation is fully supported: if the current handler does not resolve the interface, the effect bubbles up to parent handlers:
+
+- This makes it easy to:
+	- Inject test doubles or mocks
+	- Override behavior by layer
+	- Support context-local DI for concurrent goroutines
+
+
+
 ## [State](https://pkg.go.dev/github.com/on-the-ground/effect_ive_go/effects/state)
 - Lock free effects
 	- Insert, Load, CompareAndSwap, CompareAndDelete effects<!-- .element: style="font-size: 80%;margin-bottom: 1em;" -->
