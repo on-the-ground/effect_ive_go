@@ -2,7 +2,6 @@ module github.com/on-the-ground/effect_ive_go/examples/singed_poison_trail
 
 go 1.24.2
 
-require github.com/on-the-ground/effect_ive_go v0.0.1
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -15,6 +14,6 @@ require (
 	go.uber.org/zap v1.27.0 // indirect
 )
 
-replace (
-    github.com/on-the-ground/effect_ive_go v0.0.1 => ../..
-)
+require github.com/on-the-ground/effect_ive_go v0.0.0
+
+replace github.com/on-the-ground/effect_ive_go => ../../

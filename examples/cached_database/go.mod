@@ -3,7 +3,6 @@ module github.com/on-the-ground/effect_ive_go/examples/cached_database
 go 1.24.1
 
 require (
-	github.com/on-the-ground/effect_ive_go v0.0.1
 	github.com/stretchr/testify v1.10.0
 	go.uber.org/zap v1.27.0
 )
@@ -29,3 +28,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
 )
+
+require github.com/on-the-ground/effect_ive_go v0.0.0
+
+replace github.com/on-the-ground/effect_ive_go => ../../

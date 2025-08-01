@@ -7,7 +7,6 @@ import (
 
 	"github.com/on-the-ground/effect_ive_go/effects/concurrency"
 	"github.com/on-the-ground/effect_ive_go/effects/lease"
-	"github.com/on-the-ground/effect_ive_go/effects/log"
 	"github.com/on-the-ground/effect_ive_go/effects/state"
 	"github.com/on-the-ground/effect_ive_go/effects/stream"
 	"github.com/stretchr/testify/require"
@@ -15,8 +14,6 @@ import (
 
 func TestLeaseEffect_BasicLifecycle(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
-	defer endOfLogHandler()
 
 	ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
 	defer endOfConccurency()
@@ -77,8 +74,6 @@ func TestLeaseEffect_BasicLifecycle(t *testing.T) {
 
 func TestLease_TTL_AcquireAndRelease(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
-	defer endOfLogHandler()
 
 	ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
 	defer endOfConccurency()
@@ -126,8 +121,6 @@ func TestLease_TTL_AcquireAndRelease(t *testing.T) {
 
 func TestLease_TTL_AcquireAndTimelyRelease(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
-	defer endOfLogHandler()
 
 	ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
 	defer endOfConccurency()

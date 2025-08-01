@@ -8,15 +8,11 @@ import (
 	"testing"
 
 	"github.com/on-the-ground/effect_ive_go/effects/binding"
-	"github.com/on-the-ground/effect_ive_go/effects/log"
 	"github.com/on-the-ground/effect_ive_go/shared/helper"
 )
 
 func TestBindingEffect_BasicLookup(t *testing.T) {
 	ctx := context.Background()
-
-	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
-	defer endOfLogHandler()
 
 	ctx, closeFn := binding.WithEffectHandler(
 		ctx,
@@ -38,8 +34,7 @@ func TestBindingEffect_BasicLookup(t *testing.T) {
 
 func TestBindingEffect_KeyNotFound(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
-	defer endOfLogHandler()
+
 	ctx, closeFn := binding.WithEffectHandler(
 		ctx,
 		1, 1,
@@ -57,9 +52,6 @@ func TestBindingEffect_KeyNotFound(t *testing.T) {
 
 func TestBindingEffect_DelegatesToUpperScope(t *testing.T) {
 	ctx := context.Background()
-
-	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
-	defer endOfLogHandler()
 
 	upperCtx, upperClose := binding.WithEffectHandler(
 		ctx,
@@ -89,9 +81,6 @@ func TestBindingEffect_DelegatesToUpperScope(t *testing.T) {
 
 func TestBindingEffect_ConcurrentPartitionedAccess(t *testing.T) {
 	ctx := context.Background()
-
-	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
-	defer endOfLogHandler()
 
 	// prepare key-value map
 	bindings := make(map[string]any)

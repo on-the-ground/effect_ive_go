@@ -18,8 +18,6 @@ var capacityOfDropped = 1000
 
 func TestStreamEffect_MapFilterMerge(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
-	defer endOfLogHandler()
 
 	ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
 	defer endOfConccurency()
@@ -79,8 +77,6 @@ func TestStreamEffect_MapFilterMerge(t *testing.T) {
 
 func TestStreamEffect_ShutdownPropagation(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
-	defer endOfLogHandler()
 
 	ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
 	defer endOfConccurency()
@@ -161,8 +157,6 @@ func TestStreamEffect_ShutdownPropagation(t *testing.T) {
 
 func TestSubscribeStreamPayload_OneSinkReceivesEvent(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
-	defer endOfLogHandler()
 
 	ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
 	defer endOfConccurency()
@@ -213,8 +207,6 @@ outerloop:
 
 func TestSubscribeStreamPayload_MultipleSinksSequentiallyReceiveEvent(t *testing.T) {
 	ctx := context.Background()
-	ctx, logEnd := log.WithTestEffectHandler(ctx)
-	defer logEnd()
 
 	ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
 	defer endOfConccurency()
@@ -295,8 +287,6 @@ func TestSubscribeStreamPayload_MultipleSinksSequentiallyReceiveEvent(t *testing
 
 func TestStream_UnsubscribeSinkDoesNotPanic(t *testing.T) {
 	ctx := context.Background()
-	ctx, logEnd := log.WithTestEffectHandler(ctx)
-	defer logEnd()
 
 	ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
 	defer endOfConccurency()
@@ -346,8 +336,6 @@ func TestStream_UnsubscribeSinkDoesNotPanic(t *testing.T) {
 
 func TestStreamEffect_OrderByStreamPayload_SortsCorrectly(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
-	defer endOfLogHandler()
 
 	ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
 	defer endOfConccurency()
@@ -390,8 +378,6 @@ func TestStreamEffect_OrderByStreamPayload_SortsCorrectly(t *testing.T) {
 
 func TestStreamEffect_MergeStreamPayload_DoubleClose(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
-	defer endOfLogHandler()
 
 	ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
 	defer endOfConccurency()
@@ -435,8 +421,6 @@ func TestStreamEffect_LazyFilter_TTLDrop(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
-	defer endOfLogHandler()
 
 	ctx, endOfConccurency := concurrency.WithEffectHandler(ctx, 1)
 	defer endOfConccurency()

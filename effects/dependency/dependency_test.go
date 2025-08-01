@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/on-the-ground/effect_ive_go/effects/dependency"
-	"github.com/on-the-ground/effect_ive_go/effects/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,8 +48,6 @@ func newIdGetter(prefix string) idGetter {
 
 func TestDependencyEffect_Success(t *testing.T) {
 	ctx := context.Background()
-	ctx, endLog := log.WithTestEffectHandler(ctx)
-	defer endLog()
 
 	ctx, endDep := dependency.WithEffectHandler(ctx, 1, []any{&Dep2{}, Dep1{}})
 	defer endDep()
@@ -64,8 +61,6 @@ func TestDependencyEffect_Success(t *testing.T) {
 
 func TestDependencyEffect_NoMatchingDependency_NoUpstream(t *testing.T) {
 	ctx := context.Background()
-	ctx, endLog := log.WithTestEffectHandler(ctx)
-	defer endLog()
 
 	ctx, endDep := dependency.WithEffectHandler(ctx, 1, []any{&Dep2{}})
 	defer endDep()
@@ -87,9 +82,6 @@ func (Dep3) Fn1(ctx context.Context) (string, error) {
 func TestDependencyEffect_FirstMatchingWins(t *testing.T) {
 	ctx := context.Background()
 
-	ctx, endLog := log.WithTestEffectHandler(ctx)
-	defer endLog()
-
 	ctx, endDep := dependency.WithEffectHandler(ctx, 1, []any{Dep3{}, Dep1{}})
 	defer endDep()
 
@@ -110,8 +102,6 @@ func TestDependencyEffect_QuackWithoutReceiverFails(t *testing.T) {
 
 func TestDependencyEffect_DelegatesToUpstreamHandler(t *testing.T) {
 	ctx := context.Background()
-	ctx, endLog := log.WithTestEffectHandler(ctx)
-	defer endLog()
 
 	// uppper handler has a dependency
 	ctx, endParent := dependency.WithEffectHandler(ctx, 1, []any{Dep1{}})
@@ -131,8 +121,7 @@ func TestDependencyEffect_DelegatesToUpstreamHandler(t *testing.T) {
 func TestDependencyEffect_PointerTypeMatch(t *testing.T) {
 	// provide a pointer to the dependency
 	ctx := context.Background()
-	ctx, endLog := log.WithTestEffectHandler(ctx)
-	defer endLog()
+
 	ctx, endDep := dependency.WithEffectHandler(ctx, 1, []any{&Dep1{}})
 	defer endDep()
 

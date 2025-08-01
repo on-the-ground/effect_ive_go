@@ -8,7 +8,6 @@ import (
 	"github.com/on-the-ground/effect_ive_go/effects/concurrency"
 	"github.com/on-the-ground/effect_ive_go/effects/log"
 	"github.com/on-the-ground/effect_ive_go/effects/state"
-	"go.uber.org/zap"
 )
 
 type Person struct {
@@ -37,9 +36,6 @@ var (
 
 func main() {
 	ctx := context.Background()
-	logger, _ := zap.NewProduction()
-	ctx, endOfLog := log.WithZapEffectHandler(ctx, 10, logger)
-	defer endOfLog()
 
 	ctx, endOfConcurrency := concurrency.WithEffectHandler(ctx, 10)
 	defer endOfConcurrency()
@@ -75,10 +71,10 @@ func main() {
 	)
 	defer endOfDBHandler()
 
-	dbSource, err := state.EffectSource(ctx)
-	if err != nil {
-		panic(fmt.Sprintf("fail to get source channel of db: %v", err))
-	}
+	dbSource := make(chan state.TimeBoundedPayload, 10)
+	dropped := make(chan<- state.TimeBoundedPayload, 1000)
+
+	state.EventSourcingEffect(ctx, dbSource, dropped)
 	concurrency.Effect(ctx, watchEventsFrom(dbSource, "db"))
 
 	// Tier 0: cache
@@ -95,10 +91,8 @@ func main() {
 	)
 	defer endOfCacheHandler()
 
-	cacheSource, err := state.EffectSource(ctx)
-	if err != nil {
-		panic(fmt.Sprintf("fail to get source channel of db: %v", err))
-	}
+	cacheSource := make(chan state.TimeBoundedPayload, 10)
+	state.EventSourcingEffect(ctx, cacheSource, dropped)
 	concurrency.Effect(ctx, watchEventsFrom(cacheSource, "cache"))
 
 	// Insert trials
@@ -113,7 +107,7 @@ func main() {
 
 	// Final state
 	for _, key := range []string{"person1", "person2", "person3"} {
-		val, err := state.EffectLoad[string, Person](ctx, key)
+		val, err := state.LoadEffect[string, Person](ctx, key)
 		if err == nil {
 			log.Effect(ctx, log.LogInfo, "final state", map[string]interface{}{
 				"key":   key,
@@ -149,7 +143,7 @@ func watchEventsFrom(ch <-chan state.TimeBoundedPayload, name string) func(ctx c
 
 // Insert helper with logging
 func insertAndLog(ctx context.Context, key string, person Person) {
-	ok, err := state.EffectInsertIfAbsent(ctx, key, person)
+	ok, err := state.InsertIfAbsentEffect(ctx, key, person)
 	log.Effect(ctx, log.LogInfo, "insert attempt", map[string]interface{}{
 		"key":     key,
 		"value":   person,
@@ -159,7 +153,7 @@ func insertAndLog(ctx context.Context, key string, person Person) {
 }
 
 func casAndLog(ctx context.Context, key string, old, new Person) {
-	ok, err := state.EffectCompareAndSwap(ctx, key, old, new)
+	ok, err := state.CompareAndSwapEffect(ctx, key, old, new)
 	log.Effect(ctx, log.LogInfo, "cas attempt", map[string]interface{}{
 		"key":     key,
 		"old":     old,

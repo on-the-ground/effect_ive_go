@@ -16,8 +16,6 @@ import (
 
 func TestConcurrencyEffect_AllChildrenRunAndComplete(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
-	defer endOfLogHandler()
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -52,8 +50,6 @@ func TestConcurrencyEffect_AllChildrenRunAndComplete(t *testing.T) {
 
 func TestConcurrencyEffect_ContextCancelPropagatesToChildren(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
-	defer endOfLogHandler()
 
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -84,8 +80,6 @@ func TestConcurrencyEffect_ContextCancelPropagatesToChildren(t *testing.T) {
 
 func TestConcurrencyEffect_HandlesPanicsGracefully(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
-	defer endOfLogHandler()
 
 	ctx, endOfConcurrencyHandler := concurrency.WithEffectHandler(ctx, 10)
 	defer endOfConcurrencyHandler()
@@ -109,8 +103,6 @@ func TestConcurrencyEffect_HandlesPanicsGracefully(t *testing.T) {
 
 func TestConcurrencyEffect_WaitsUntilAllChildrenFinish(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
-	defer endOfLogHandler()
 
 	ctx, endOfConcurrencyHandler := concurrency.WithEffectHandler(ctx, 10)
 	defer endOfConcurrencyHandler() // trigger waitChildren and block until goroutines finish
@@ -150,8 +142,6 @@ func TestConcurrencyEffect_WaitsUntilAllChildrenFinish(t *testing.T) {
 
 func TestConcurrencyEffect_SpawnsAndCleansUpAll(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
-	defer endOfLogHandler()
 
 	ctx, endOfConcurrencyHandler := concurrency.WithEffectHandler(ctx, 10)
 
@@ -209,8 +199,6 @@ func TestConcurrencyEffect_SpawnsAndCleansUpAll(t *testing.T) {
 
 func TestAwaitAll_Success(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
-	defer endOfLogHandler()
 
 	ch1 := make(chan handlers.ResumableResult, 1)
 	ch2 := make(chan handlers.ResumableResult, 1)
@@ -238,8 +226,6 @@ func TestAwaitAll_Success(t *testing.T) {
 
 func TestAwaitAll_ClosedChannel(t *testing.T) {
 	ctx := context.Background()
-	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
-	defer endOfLogHandler()
 
 	ch := make(chan handlers.ResumableResult)
 	close(ch)
@@ -253,9 +239,6 @@ func TestAwaitAll_ClosedChannel(t *testing.T) {
 
 func TestAwaitAll_CancelledContext(t *testing.T) {
 	ctx := context.Background()
-
-	ctx, endOfLogHandler := log.WithTestEffectHandler(ctx)
-	defer endOfLogHandler()
 
 	ctx, cancel := context.WithCancel(ctx)
 	ch := make(chan handlers.ResumableResult)
