@@ -12,6 +12,12 @@ import (
 type LogLevel string
 
 const (
+	// LogTrace is used for traceging messages with detailed internal information.
+	LogTrace LogLevel = "trace"
+
+	// LogDebug is used for debugging messages with detailed internal information.
+	LogDebug LogLevel = "debug"
+
 	// LogInfo is used for general informational messages.
 	LogInfo LogLevel = "info"
 
@@ -20,9 +26,6 @@ const (
 
 	// LogError is used for error events that might still allow the application to continue running.
 	LogError LogLevel = "error"
-
-	// LogDebug is used for debugging messages with detailed internal information.
-	LogDebug LogLevel = "debug"
 
 	// LogFatal is used for fatal log messages that terminate the application.
 	LogFatal LogLevel = "fatal"
@@ -50,6 +53,7 @@ type Logger interface {
 	Warn(msg string, fields ...map[string]interface{})
 	Error(msg string, fields ...map[string]interface{})
 	Debug(msg string, fields ...map[string]interface{})
+	Trace(msg string, fields ...map[string]interface{})
 	Fatal(msg string, fields ...map[string]interface{})
 	Panic(msg string, fields ...map[string]interface{})
 	Sync() error
@@ -80,6 +84,8 @@ func WithEffectHandler(
 				logger.Error(payload.Message, payload.Fields)
 			case LogDebug:
 				logger.Debug(payload.Message, payload.Fields)
+			case LogTrace:
+				logger.Trace(payload.Message, payload.Fields)
 			case LogFatal:
 				logger.Fatal(payload.Message, payload.Fields)
 			case LogPanic:

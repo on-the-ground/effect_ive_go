@@ -28,11 +28,14 @@ func normalizeZapFields(fields ...map[string]interface{}) []zap.Field {
 	return zapFields
 }
 
-func (l *ZapLogger) Info(msg string, fields ...map[string]interface{}) {
-	l.zapLogger.Info(msg, normalizeZapFields(fields...)...)
+func (l *ZapLogger) Trace(msg string, fields ...map[string]interface{}) {
+	l.zapLogger.Debug(msg, normalizeZapFields(fields...)...)
 }
 func (l *ZapLogger) Debug(msg string, fields ...map[string]interface{}) {
 	l.zapLogger.Debug(msg, normalizeZapFields(fields...)...)
+}
+func (l *ZapLogger) Info(msg string, fields ...map[string]interface{}) {
+	l.zapLogger.Info(msg, normalizeZapFields(fields...)...)
 }
 func (l *ZapLogger) Warn(msg string, fields ...map[string]interface{}) {
 	l.zapLogger.Warn(msg, normalizeZapFields(fields...)...)
