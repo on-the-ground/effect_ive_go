@@ -3,6 +3,7 @@ package effects
 import (
 	"context"
 	"log"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/on-the-ground/effect_ive_go/effects/internal/handlers"
@@ -36,10 +37,21 @@ func WithFireAndForgetEffectHandler[P any](
 	ctx := context.WithValue(pctx, effectKey, handler)
 	log.Printf("created fire/forget effect handler: effectId: %v, effectKey: %v", handler.EffectId, effectKey)
 
+	var once sync.Once
+
 	return ctx, func() context.Context {
-		td()
-		cancelHandler()
-		log.Printf("closed fire/forget effect handler: effectId: %v, effectKey: %v", handler.EffectId, effectKey)
+		ran := false
+		once.Do(func() {
+			ran = true
+			// Stop intake first, then teardown.
+			cancelHandler()
+			td()
+			log.Printf("closed fireNforget effect handler: effectId: %v, effectKey: %v", handler.EffectId, effectKey)
+		})
+		if !ran {
+			// Someone already closed it. Make the log match the handler type.
+			log.Printf("fireNforget effect handler already closed: effectId: %v, effectKey: %v", handler.EffectId, effectKey)
+		}
 		return pctx
 	}
 }
@@ -68,10 +80,21 @@ func WithFireAndForgetPartitionableEffectHandler[P effectmodel.Partitionable](
 	ctx := context.WithValue(pctx, effectKey, handler)
 	log.Printf("created fire/forget effect handler: effectId: %v, effectKey: %v", handler.EffectId, effectKey)
 
+	var once sync.Once
+
 	return ctx, func() context.Context {
-		td()
-		cancelHandler()
-		log.Printf("closed fire/forget effect handler: effectId: %v, effectKey: %v", handler.EffectId, effectKey)
+		ran := false
+		once.Do(func() {
+			ran = true
+			// Stop intake first, then teardown.
+			cancelHandler()
+			td()
+			log.Printf("closed fireNforget effect handler: effectId: %v, effectKey: %v", handler.EffectId, effectKey)
+		})
+		if !ran {
+			// Someone already closed it. Make the log match the handler type.
+			log.Printf("fireNforget effect handler already closed: effectId: %v, effectKey: %v", handler.EffectId, effectKey)
+		}
 		return pctx
 	}
 }
