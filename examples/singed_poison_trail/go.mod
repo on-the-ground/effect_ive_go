@@ -1,7 +1,6 @@
 module github.com/on-the-ground/effect_ive_go/examples/singed_poison_trail
 
-go 1.24.2
-
+go 1.23.0
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -11,7 +10,6 @@ require (
 	github.com/rickb777/period v1.0.9 // indirect
 	github.com/rickb777/plural v1.4.2 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
-	go.uber.org/zap v1.27.0 // indirect
 )
 
 require github.com/on-the-ground/effect_ive_go v0.0.0
