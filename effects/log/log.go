@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"maps"
 
 	"github.com/on-the-ground/effect_ive_go/effects"
 )
@@ -69,29 +70,33 @@ func WithEffectHandler(
 	ctx context.Context,
 	bufferSize int,
 	logger Logger,
+	defaultFields ...map[string]interface{},
 ) (context.Context, func() context.Context) {
 	return effects.WithFireAndForgetEffectHandler(
 		ctx,
 		bufferSize,
 		effectKey,
 		func(ctx context.Context, payload payload) {
+			fields := defaultFields[0]
+			maps.Copy(fields, payload.Fields)
+
 			switch payload.Level {
 			case LogInfo:
-				logger.Info(payload.Message, payload.Fields)
+				logger.Info(payload.Message, fields)
 			case LogWarn:
-				logger.Warn(payload.Message, payload.Fields)
+				logger.Warn(payload.Message, fields)
 			case LogError:
-				logger.Error(payload.Message, payload.Fields)
+				logger.Error(payload.Message, fields)
 			case LogDebug:
-				logger.Debug(payload.Message, payload.Fields)
+				logger.Debug(payload.Message, fields)
 			case LogTrace:
-				logger.Trace(payload.Message, payload.Fields)
+				logger.Trace(payload.Message, fields)
 			case LogFatal:
-				logger.Fatal(payload.Message, payload.Fields)
+				logger.Fatal(payload.Message, fields)
 			case LogPanic:
-				logger.Panic(payload.Message, payload.Fields)
+				logger.Panic(payload.Message, fields)
 			default:
-				logger.Info(payload.Message, payload.Fields)
+				logger.Info(payload.Message, fields)
 			}
 		},
 		func() {
